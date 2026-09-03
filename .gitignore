@@ -1,0 +1,29 @@
+# Environment
+.env
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+
+# Node / frontend
+node_modules/
+frontend/dist/
+
+# Uploaded files (keep directory structure, ignore contents)
+uploads/materials/*
+uploads/documents/*
+uploads/images/*
+!uploads/materials/.gitkeep
+!uploads/documents/.gitkeep
+!uploads/images/.gitkeep
+
+# Unused Vite scaffold
+/app/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
