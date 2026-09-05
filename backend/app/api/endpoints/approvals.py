@@ -64,6 +64,7 @@ def _to_detail(approval: ApprovalRequest) -> ApprovalDetailOut:
 @router.get("", response_model=list[ApprovalRequestOut])
 def list_approvals(
     status_filter: str | None = Query(None, alias="status"),
+    cpse_id: uuid.UUID | None = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles(RoleName.ADMIN.value, RoleName.MATERIAL_EXPERT.value, RoleName.VIEWER.value)),
 ):
@@ -72,6 +73,10 @@ def list_approvals(
         query = query.filter(ApprovalRequest.status == status_filter)
     else:
         query = query.filter(ApprovalRequest.status == ApprovalStatus.PENDING.value)
+    if cpse_id:
+        query = query.join(Material, ApprovalRequest.material_id == Material.id).filter(
+            Material.cpse_id == cpse_id
+        )
     return query.order_by(ApprovalRequest.created_at.desc()).all()
 
 

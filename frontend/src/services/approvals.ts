@@ -1,8 +1,10 @@
 import { api } from "@/services/api";
 import type { ApprovalDetail, ApprovalRequest } from "@/types";
 
-export async function listApprovals(status?: string) {
-  const { data } = await api.get<ApprovalRequest[]>("/approvals", { params: { status } });
+export async function listApprovals(status?: string, cpseId?: string) {
+  const { data } = await api.get<ApprovalRequest[]>("/approvals", {
+    params: { status, cpse_id: cpseId || undefined },
+  });
   return data;
 }
 

@@ -61,6 +61,15 @@ class ActorType(str, enum.Enum):
     SYSTEM = "SYSTEM"
 
 
+class UploadStatus(str, enum.Enum):
+    VALIDATING = "VALIDATING"
+    QUEUED = "QUEUED"
+    PROCESSING = "PROCESSING"
+    COMPLETED = "COMPLETED"
+    PARTIAL = "PARTIAL"
+    FAILED = "FAILED"
+
+
 class NotificationType(str, enum.Enum):
     MATERIAL_UPLOADED = "MATERIAL_UPLOADED"
     AI_ANALYSIS_COMPLETED = "AI_ANALYSIS_COMPLETED"

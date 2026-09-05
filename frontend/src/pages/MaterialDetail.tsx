@@ -3,6 +3,7 @@ import { Sparkles } from "lucide-react";
 import type { ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
+import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -43,8 +44,9 @@ export default function MaterialDetail() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between">
-        <div>
+      <div className="flex items-start justify-between border-b border-slate-300 pb-4">
+        <div className="space-y-2">
+          <Breadcrumbs items={[{ label: "Material Management", to: "/materials" }, { label: material.material_code }]} />
           <div className="flex items-center gap-2">
             <h1 className="text-xl font-bold text-slate-900">{material.material_code}</h1>
             <StatusBadge status={material.status} />
@@ -62,6 +64,21 @@ export default function MaterialDetail() {
         </div>
       </div>
 
+      {material.common_code && (
+        <Card className="border-success-600/30 bg-success-50/40">
+          <CardContent className="flex flex-wrap items-center justify-between gap-3 py-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-success-700">AI Status: Harmonized</p>
+              <p className="mt-1 text-lg font-bold text-success-700">{material.common_code.code}</p>
+              <p className="text-sm text-slate-600">{material.common_code.standard_description}</p>
+            </div>
+            <Button asChild variant="outline">
+              <Link to={`/common-material-master/${material.common_code.code}`}>View Common Material</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <CardHeader>
@@ -78,6 +95,15 @@ export default function MaterialDetail() {
             <Field label="Manufacturer" value={material.manufacturer} />
             <Field label="Brand" value={material.brand} />
             <Field label="Material Type" value={material.material_type} />
+            {material.source_database && (
+              <>
+                <Field label="Source Database" value={material.source_database} />
+                <Field
+                  label="Last Synchronized"
+                  value={material.last_synced_at ? new Date(material.last_synced_at).toLocaleString() : undefined}
+                />
+              </>
+            )}
             <Field
               label="Common Material Code"
               value={

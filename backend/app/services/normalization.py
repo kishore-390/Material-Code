@@ -64,6 +64,35 @@ _CATEGORY_SINGULAR_OVERRIDES = {
     "CHEMICALS": "CHEMICAL",
 }
 
+# Real industrial vocabulary variants for the same category family, seen across
+# different CPSE material masters using different in-house wording. This is a
+# general phrase-canonicalization table - not tuned to any specific demo pair -
+# checked in addition to the plain singular/plural mapping above.
+CATEGORY_SYNONYM_PHRASES: dict[str, str] = {
+    "PIPING": "PIPE",
+    "PIPING MATERIAL": "PIPE",
+    "PIPING MATERIALS": "PIPE",
+    "PIPE MATERIAL": "PIPE",
+    "PIPE MATERIALS": "PIPE",
+    "SEAMLESS PIPE": "PIPE",
+    "SEAMLESS PIPES": "PIPE",
+    "INDUSTRIAL VALVE": "VALVE",
+    "INDUSTRIAL VALVES": "VALVE",
+    "VALVE EQUIPMENT": "VALVE",
+    "INDUSTRIAL PUMP": "PUMP",
+    "INDUSTRIAL PUMPS": "PUMP",
+    "CENTRIFUGAL PUMP": "PUMP",
+    "CENTRIFUGAL PUMPS": "PUMP",
+    "BALL BEARING": "BEARING",
+    "BALL BEARINGS": "BEARING",
+    "INDUSTRIAL BEARING": "BEARING",
+    "INDUSTRIAL BEARINGS": "BEARING",
+    "ELECTRICAL CABLE": "CABLE",
+    "ELECTRICAL CABLES": "CABLE",
+    "INDUSTRIAL CHEMICAL": "CHEMICAL",
+    "INDUSTRIAL CHEMICALS": "CHEMICAL",
+}
+
 _WS_RE = re.compile(r"\s+")
 _PUNCT_RE = re.compile(r"[.,;:_/\\]+")
 _DIMENSION_INCH_RE = re.compile(
@@ -123,6 +152,8 @@ def normalize_uom(uom: str | None) -> str:
 def normalize_category(category: str | None) -> str:
     cleaned = basic_clean(category)
     cleaned = _expand_abbreviations(cleaned)
+    if cleaned in CATEGORY_SYNONYM_PHRASES:
+        return CATEGORY_SYNONYM_PHRASES[cleaned]
     if cleaned in _CATEGORY_SINGULAR_OVERRIDES:
         return _CATEGORY_SINGULAR_OVERRIDES[cleaned]
     return cleaned

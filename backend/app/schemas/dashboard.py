@@ -9,6 +9,7 @@ class DashboardStatistics(BaseModel):
     duplicate_codes_reduced: int
     ai_recommendations: int
     common_codes_generated: int
+    approved_common_codes: int
 
 
 class ChartPoint(BaseModel):

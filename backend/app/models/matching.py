@@ -1,7 +1,7 @@
 import uuid
 from typing import Optional
 
-from sqlalchemy import Float, ForeignKey, String, Text
+from sqlalchemy import Boolean, Float, ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -59,6 +59,12 @@ class AIAnalysis(Base, UUIDMixin, TimestampMixin):
 
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="COMPLETED")
     failure_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    ml_probability: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    ml_status: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+
+    technical_conflict: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    conflict_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     material: Mapped["Material"] = relationship(foreign_keys=[material_id])
     best_candidate: Mapped[Optional["Material"]] = relationship(foreign_keys=[best_candidate_material_id])

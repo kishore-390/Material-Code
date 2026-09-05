@@ -14,6 +14,8 @@ export interface CPSEBrief {
 
 export interface CPSE extends CPSEBrief {
   sector?: string | null;
+  description?: string | null;
+  logo_url?: string | null;
   is_active: boolean;
   created_at: string;
 }
@@ -63,6 +65,10 @@ export interface Material {
   image_url?: string | null;
   cpse: CPSEBrief;
   common_code?: CommonCodeBrief | null;
+  source_system?: string | null;
+  source_database?: string | null;
+  source_material_code?: string | null;
+  last_synced_at?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -118,6 +124,8 @@ export interface AIAnalysis {
   recommended_common_code?: string | null;
   status: string;
   failure_reason?: string | null;
+  technical_conflict: boolean;
+  conflict_reason?: string | null;
   best_candidate?: Material | null;
   candidates: CandidateScore[];
   created_at: string;
@@ -132,6 +140,8 @@ export interface CommonMaterialCode {
   standard_specification?: string | null;
   uom: string;
   status: string;
+  confidence_score?: number | null;
+  decision_status?: string | null;
   created_at: string;
 }
 
@@ -214,6 +224,7 @@ export interface DashboardStatistics {
   duplicate_codes_reduced: number;
   ai_recommendations: number;
   common_codes_generated: number;
+  approved_common_codes: number;
 }
 
 export interface ChartPoint {
@@ -231,26 +242,56 @@ export interface DashboardTrends {
   estimated_savings: ChartPoint[];
 }
 
-export interface BulkValidationRow {
-  row_number: number;
-  data: Record<string, string | null>;
-  errors: string[];
-  is_valid: boolean;
+export type UploadBatchStatus = "VALIDATING" | "QUEUED" | "PROCESSING" | "COMPLETED" | "PARTIAL" | "FAILED";
+
+export interface UploadBatch {
+  id: string;
+  cpse: CPSEBrief;
+  filename: string;
+  uploader?: { id: string; username: string; full_name: string } | null;
+  total_records: number;
+  valid_records: number;
+  invalid_records: number;
+  duplicate_records: number;
+  status: UploadBatchStatus;
+  error_message?: string | null;
+  created_at: string;
+  completed_at?: string | null;
 }
 
-export interface BulkValidationResponse {
-  batch_token: string;
-  total_rows: number;
-  valid_rows: number;
-  invalid_rows: number;
-  rows: BulkValidationRow[];
+export interface UploadBatchListResponse {
+  items: UploadBatch[];
+  total: number;
+  page: number;
+  page_size: number;
 }
 
-export interface BulkImportResponse {
-  total_uploaded: number;
-  successfully_imported: number;
-  validation_errors: number;
-  queued_for_ai: number;
+export interface ScanTriggerResponse {
+  queued: number;
+  material_ids: string[];
+  mode: "QUEUED" | "PROCESSED_INLINE";
+}
+
+export interface ScanStatusItem {
+  material_id: string;
+  material_code: string;
+  cpse_code: string;
+  description: string;
+  category: string;
+  material_status: string;
+  conflict_reason?: string | null;
+  best_candidate_material_code?: string | null;
+  best_candidate_cpse_code?: string | null;
+  latest_decision?: Decision | null;
+  ai_confidence?: number | null;
+  technical_conflict: boolean;
+  common_code?: CommonCodeBrief | null;
+}
+
+export interface ScanStatusResponse {
+  total: number;
+  completed: number;
+  items: ScanStatusItem[];
 }
 
 export interface SystemSettings {

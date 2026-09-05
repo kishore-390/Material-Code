@@ -25,11 +25,7 @@ def approve_harmonization(db, harmonization: HarmonizationRequest, actor: User, 
 
     if common_code is None:
         common_code = CommonMaterialCode(
-            code=generate_common_code(
-                db,
-                material.material_type or (candidate.material_type if candidate else None),
-                material.normalized_category or (candidate.normalized_category if candidate else None),
-            ),
+            code=generate_common_code(db),
             material_type=material.material_type or (candidate.material_type if candidate else None) or "GENERIC",
             category=material.normalized_category or (candidate.normalized_category if candidate else None) or material.category,
             standard_description=material.description,

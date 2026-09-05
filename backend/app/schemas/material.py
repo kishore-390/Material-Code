@@ -70,6 +70,10 @@ class MaterialOut(BaseModel):
     image_url: Optional[str] = None
     cpse: CPSEBrief
     common_code: Optional[CommonCodeBrief] = None
+    source_system: Optional[str] = None
+    source_database: Optional[str] = None
+    source_material_code: Optional[str] = None
+    last_synced_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
 
@@ -103,6 +107,7 @@ class BulkValidationRow(BaseModel):
 
 class BulkValidationResponse(BaseModel):
     batch_token: str
+    upload_batch_id: Optional[uuid.UUID] = None
     total_rows: int
     valid_rows: int
     invalid_rows: int
@@ -110,7 +115,7 @@ class BulkValidationResponse(BaseModel):
 
 
 class BulkImportResponse(BaseModel):
+    upload_batch_id: uuid.UUID
+    status: str
     total_uploaded: int
-    successfully_imported: int
     validation_errors: int
-    queued_for_ai: int

@@ -2,9 +2,17 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --app-font-scale: 1;
+}
+
+html {
+  font-size: calc(16px * var(--app-font-scale));
+}
+
 @layer base {
   body {
-    @apply bg-slate-50 text-slate-900 antialiased;
+    @apply bg-slate-100 text-slate-900 antialiased font-sans;
   }
 }
 
@@ -15,5 +23,17 @@
   }
   .scrollbar-thin::-webkit-scrollbar-thumb {
     @apply bg-slate-300 rounded-full;
+  }
+
+  .gov-stripe {
+    background: linear-gradient(
+      to right,
+      #ff9933 0%,
+      #ff9933 33.33%,
+      #ffffff 33.33%,
+      #ffffff 66.66%,
+      #138808 66.66%,
+      #138808 100%
+    );
   }
 }

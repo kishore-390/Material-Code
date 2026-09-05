@@ -1,7 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, CheckCircle2, HelpCircle, RefreshCcw, XCircle } from "lucide-react";
+import { AlertTriangle, RefreshCcw } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 
+import { EvidenceChecklist } from "@/components/EvidenceChecklist";
+import { PageHeader } from "@/components/PageHeader";
 import { ScoreBar } from "@/components/ScoreBar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,14 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getAnalysis, triggerAnalysis } from "@/services/ai";
 import { createHarmonizationRequest } from "@/services/harmonization";
 import { getMaterial } from "@/services/materials";
-import type { Decision } from "@/types";
-
-const DECISION_META: Record<Decision, { label: string; icon: typeof CheckCircle2; tone: string }> = {
-  AUTO_HARMONIZATION: { label: "AUTO HARMONIZATION ELIGIBLE", icon: CheckCircle2, tone: "text-success-600" },
-  HUMAN_REVIEW_REQUIRED: { label: "HUMAN APPROVAL REQUIRED", icon: HelpCircle, tone: "text-warning-600" },
-  LOW_CONFIDENCE: { label: "LOW CONFIDENCE", icon: AlertTriangle, tone: "text-warning-600" },
-  NO_COMMON_CODE: { label: "NO COMMON CODE POSSIBLE", icon: XCircle, tone: "text-danger-600" },
-};
+import { DECISION_META } from "@/utils/decision";
 
 export default function MaterialAnalysis() {
   const { id } = useParams<{ id: string }>();
@@ -52,10 +47,11 @@ export default function MaterialAnalysis() {
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
-      <div>
-        <h1 className="text-xl font-bold text-slate-900">AI Material Analysis</h1>
-        <p className="text-sm text-slate-500">Explainable AI recommendation for common material code harmonization</p>
-      </div>
+      <PageHeader
+        breadcrumbs={[{ label: "AI Harmonization", to: "/harmonization" }, { label: "AI Analysis" }]}
+        title="AI Material Analysis"
+        subtitle="Explainable AI recommendation for common material code harmonization"
+      />
 
       <Card>
         <CardHeader>
@@ -171,11 +167,45 @@ export default function MaterialAnalysis() {
           </Card>
 
           <Card>
+            <CardHeader>
+              <CardTitle>Why did AI recommend this?</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <EvidenceChecklist
+                items={[
+                  { label: "Description similarity", score: analysis.description_score },
+                  { label: "Specification compatibility", score: analysis.specification_score },
+                  { label: "Category compatibility", score: analysis.category_score },
+                  { label: "UOM compatibility", score: analysis.uom_score },
+                  { label: "Attribute / material grade compatibility", score: analysis.attribute_score },
+                  { label: "Image similarity", score: analysis.image_score },
+                ]}
+              />
+            </CardContent>
+          </Card>
+
+          {analysis.technical_conflict && (
+            <Card className="border-warning-600/30 bg-warning-50/40">
+              <CardContent className="flex items-start gap-3 py-4">
+                <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-warning-600" />
+                <div>
+                  <p className="text-sm font-bold text-warning-700">Technical Conflict Detected</p>
+                  <p className="text-xs text-slate-600">Reason: {analysis.conflict_reason}</p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    This pair is routed for mandatory human validation and will not be auto-harmonized regardless
+                    of similarity score.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          <Card>
             <CardContent className="flex flex-col items-center gap-3 py-6 text-center">
               {meta && (
                 <div className={`flex items-center gap-2 text-lg font-bold ${meta.tone}`}>
                   <meta.icon className="h-6 w-6" />
-                  {meta.label}
+                  {meta.confidenceLabel} &middot; {meta.statusLabel}
                 </div>
               )}
 

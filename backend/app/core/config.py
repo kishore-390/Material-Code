@@ -26,6 +26,13 @@ class Settings(BaseSettings):
     IMAGE_EMBEDDING_DIM: int = 512
     AI_USE_MOCK_FALLBACK: bool = True
 
+    # Optional trained XGBoost material-match classifier. Absent by default -
+    # see app/ml/train_xgb_ranker.py for how one would be produced from a
+    # labeled dataset. Until a file exists at this path, the ML score is
+    # reported as unavailable and the existing weighted rule-based score
+    # remains the sole basis for the harmonization decision.
+    XGB_MODEL_PATH: str = "app/ml_models/material_match_xgb.json"
+
     THRESHOLD_AUTO: float = 95.0
     THRESHOLD_REVIEW: float = 85.0
     THRESHOLD_LOW: float = 60.0

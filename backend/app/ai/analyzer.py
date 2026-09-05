@@ -8,12 +8,16 @@ engine, and -- critically -- the governance separation between an AI
 Only the AUTO_HARMONIZATION path writes to the master directly, and even
 then every step is written to the audit log in the same transaction.
 """
+import dataclasses
 import logging
 import uuid
 
+from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
+from app.ai.conflict_detector import ConflictResult, detect_conflict
 from app.ai.image_embeddings import generate_image_embedding
+from app.ai.ml_ranker import blend_scores
 from app.ai.similarity import find_candidate_materials
 from app.ai.text_embeddings import generate_text_embedding
 from app.models.approval import ApprovalRequest
@@ -79,6 +83,81 @@ def ensure_embeddings(db: Session, material: Material) -> MaterialEmbedding:
     return embedding
 
 
+def _score_pair(
+    db: Session,
+    material: Material,
+    embedding: MaterialEmbedding,
+    attrs_a: dict[str, str],
+    candidate: Material,
+):
+    """
+    Weighted score between `material` (with its already-computed embedding)
+    and one `candidate`. Returns (ScoreBreakdown, text_cosine).
+    """
+    cand_embedding = candidate.embedding
+    text_cos = cosine_similarity(
+        embedding.text_embedding, cand_embedding.text_embedding if cand_embedding else None
+    )
+
+    description_score = field_text_score(
+        material.normalized_description or "", candidate.normalized_description or "", text_cos
+    )
+    specification_score = field_text_score(
+        material.normalized_specification or "", candidate.normalized_specification or "", text_cos
+    )
+    category_score_val = cat_score_fn(material.normalized_category or "", candidate.normalized_category or "")
+    uom_score_val = uom_score_fn(material.normalized_uom or "", candidate.normalized_uom or "")
+    attrs_b = _attributes_dict(db, candidate.id)
+    attribute_score_val = attr_score_fn(attrs_a, attrs_b)
+
+    has_image_both = (
+        embedding.image_embedding is not None
+        and cand_embedding is not None
+        and cand_embedding.image_embedding is not None
+    )
+    image_score_val = (
+        img_score_fn(embedding.image_embedding, cand_embedding.image_embedding) if has_image_both else 0.0
+    )
+
+    breakdown = compute_final_score(
+        description_score,
+        specification_score,
+        category_score_val,
+        uom_score_val,
+        image_score_val,
+        attribute_score_val,
+        has_image_both,
+    )
+    return breakdown, text_cos
+
+
+def _check_conflict(material: Material, candidate: Material) -> ConflictResult:
+    text_a = f"{material.description} {material.specification or ''}"
+    text_b = f"{candidate.description} {candidate.specification or ''}"
+    return detect_conflict(text_a, text_b)
+
+
+def _apply_conflict_gate(decision_result, conflict: ConflictResult):
+    """
+    Mandatory human validation rule: a genuine technical incompatibility
+    (grade/dimension/thread/voltage/pressure mismatch) must never be
+    auto-finalized purely because the semantic similarity score was high
+    enough to clear the auto-harmonization threshold. This only ever
+    downgrades AUTO_HARMONIZATION -> HUMAN_REVIEW_REQUIRED; it never
+    upgrades a decision, and it never touches the underlying score.
+    """
+    if not conflict.has_conflict or decision_result.decision != Decision.AUTO_HARMONIZATION.value:
+        return decision_result
+    return dataclasses.replace(
+        decision_result,
+        decision=Decision.HUMAN_REVIEW_REQUIRED.value,
+        message="AI similarity score met the auto-harmonization threshold, but a technical conflict was "
+        "detected - human confirmation is required before harmonization.",
+        reason_text=f"{decision_result.reason_text} However, a technical conflict was detected: "
+        f"{'; '.join(conflict.reasons)}.",
+    )
+
+
 def _handle_decision(
     db: Session,
     material: Material,
@@ -87,15 +166,32 @@ def _handle_decision(
     breakdown,
     decision_result,
 ) -> None:
+    if material.common_code is not None and material.common_code.status == "APPROVED":
+        # A human has already approved this material's mapping. A rescan
+        # (e.g. the full-database scan) may still re-evaluate it against
+        # newly-synced candidates, but an approved mapping is authoritative
+        # and must never be silently reassigned to a different code.
+        log_action(
+            db,
+            action="RESCAN_SKIPPED_APPROVED_MAPPING",
+            entity_type="material",
+            entity_id=material.id,
+            actor_name="AI ENGINE",
+            actor_type=ActorType.AI_ENGINE.value,
+            details={
+                "material_code": material.material_code,
+                "existing_common_code": material.common_code.code,
+                "decision": decision_result.decision,
+            },
+        )
+        db.commit()
+        return
+
     if decision_result.decision == Decision.AUTO_HARMONIZATION.value and best_candidate is not None:
         common_code = best_candidate.common_code
         if common_code is None:
             common_code = CommonMaterialCode(
-                code=generate_common_code(
-                    db,
-                    material.material_type or best_candidate.material_type,
-                    material.normalized_category or best_candidate.normalized_category,
-                ),
+                code=generate_common_code(db),
                 material_type=material.material_type or best_candidate.material_type or "GENERIC",
                 category=material.normalized_category or best_candidate.normalized_category or material.category,
                 standard_description=material.description,
@@ -103,11 +199,18 @@ def _handle_decision(
                 uom=material.normalized_uom or material.uom,
                 status="AUTO_GENERATED",
                 created_by=None,
+                confidence_score=breakdown.final_score,
+                decision_status=decision_result.decision,
             )
             db.add(common_code)
             db.flush()
             best_candidate.common_code_id = common_code.id
             best_candidate.status = MaterialStatus.HARMONIZED.value
+        else:
+            # Reused an existing code - record the confidence of this latest
+            # harmonization event that touched it, not just the one that first created it.
+            common_code.confidence_score = breakdown.final_score
+            common_code.decision_status = decision_result.decision
 
         material.common_code_id = common_code.id
         material.status = MaterialStatus.HARMONIZED.value
@@ -152,6 +255,52 @@ def _handle_decision(
         )
 
     elif decision_result.decision == Decision.HUMAN_REVIEW_REQUIRED.value and best_candidate is not None:
+        # Idempotency: a rescan must not pile up duplicate pending approval
+        # requests for the same pair every time it re-evaluates the same
+        # not-yet-approved material. Reuse (refresh) an existing PENDING
+        # request for this exact pair - in either material/candidate order,
+        # since which side is "material" depends on which record the scan
+        # happened to visit first - instead of creating a new one.
+        existing_approval = (
+            db.query(ApprovalRequest)
+            .filter(
+                ApprovalRequest.status == ApprovalStatus.PENDING.value,
+                or_(
+                    and_(
+                        ApprovalRequest.material_id == material.id,
+                        ApprovalRequest.candidate_material_id == best_candidate.id,
+                    ),
+                    and_(
+                        ApprovalRequest.material_id == best_candidate.id,
+                        ApprovalRequest.candidate_material_id == material.id,
+                    ),
+                ),
+            )
+            .first()
+        )
+
+        if existing_approval is not None:
+            existing_approval.ai_score = breakdown.final_score
+            existing_approval.reason = decision_result.reason_text
+            harmonization = (
+                db.query(HarmonizationRequest)
+                .filter(HarmonizationRequest.id == existing_approval.harmonization_request_id)
+                .first()
+            )
+            if harmonization is not None:
+                harmonization.ai_analysis_id = analysis.id
+            db.commit()
+            log_action(
+                db,
+                action="APPROVAL_REQUEST_REFRESHED",
+                entity_type="approval_request",
+                entity_id=existing_approval.id,
+                actor_name="AI ENGINE",
+                actor_type=ActorType.AI_ENGINE.value,
+                details={"material_code": material.material_code, "final_score": breakdown.final_score},
+            )
+            return
+
         harmonization = HarmonizationRequest(
             material_id=material.id,
             candidate_material_id=best_candidate.id,
@@ -214,42 +363,7 @@ def analyze_material(db: Session, material_id: uuid.UUID) -> AIAnalysis:
 
         scored: list[tuple[Material, object]] = []
         for candidate in candidates:
-            attrs_b = _attributes_dict(db, candidate.id)
-            cand_embedding = candidate.embedding
-            text_cos = cosine_similarity(
-                embedding.text_embedding, cand_embedding.text_embedding if cand_embedding else None
-            )
-
-            description_score = field_text_score(
-                material.normalized_description or "", candidate.normalized_description or "", text_cos
-            )
-            specification_score = field_text_score(
-                material.normalized_specification or "", candidate.normalized_specification or "", text_cos
-            )
-            category_score_val = cat_score_fn(material.normalized_category or "", candidate.normalized_category or "")
-            uom_score_val = uom_score_fn(material.normalized_uom or "", candidate.normalized_uom or "")
-            attribute_score_val = attr_score_fn(attrs_a, attrs_b)
-
-            has_image_both = (
-                embedding.image_embedding is not None
-                and cand_embedding is not None
-                and cand_embedding.image_embedding is not None
-            )
-            image_score_val = (
-                img_score_fn(embedding.image_embedding, cand_embedding.image_embedding)
-                if has_image_both
-                else 0.0
-            )
-
-            breakdown = compute_final_score(
-                description_score,
-                specification_score,
-                category_score_val,
-                uom_score_val,
-                image_score_val,
-                attribute_score_val,
-                has_image_both,
-            )
+            breakdown, text_cos = _score_pair(db, material, embedding, attrs_a, candidate)
 
             db.add(
                 MaterialMatch(
@@ -274,15 +388,18 @@ def analyze_material(db: Session, material_id: uuid.UUID) -> AIAnalysis:
         else:
             best_candidate, best_breakdown = None, compute_final_score(0, 0, 0, 0, 0, 0, False)
 
+        decision_breakdown, ml_result = blend_scores(best_breakdown)
         decision_result = evaluate(
-            best_breakdown, material.description, best_candidate.description if best_candidate else ""
+            decision_breakdown, material.description, best_candidate.description if best_candidate else ""
         )
+        conflict = _check_conflict(material, best_candidate) if best_candidate else ConflictResult(False, [])
+        decision_result = _apply_conflict_gate(decision_result, conflict)
         failure_reason = "No similar material found in the database for comparison." if not scored else None
 
         analysis = AIAnalysis(
             material_id=material.id,
             best_candidate_material_id=best_candidate.id if best_candidate else None,
-            final_score=best_breakdown.final_score,
+            final_score=decision_breakdown.final_score,
             description_score=best_breakdown.description_score,
             specification_score=best_breakdown.specification_score,
             category_score=best_breakdown.category_score,
@@ -293,6 +410,10 @@ def analyze_material(db: Session, material_id: uuid.UUID) -> AIAnalysis:
             reason_text=decision_result.reason_text if scored else decision_result.message,
             status="COMPLETED",
             failure_reason=failure_reason,
+            ml_probability=ml_result.score,
+            ml_status=ml_result.status,
+            technical_conflict=conflict.has_conflict,
+            conflict_reason="; ".join(conflict.reasons) if conflict.reasons else None,
         )
         db.add(analysis)
         db.commit()
@@ -310,13 +431,14 @@ def analyze_material(db: Session, material_id: uuid.UUID) -> AIAnalysis:
             actor_name="AI ENGINE",
             actor_type=ActorType.AI_ENGINE.value,
             details={
-                "final_score": best_breakdown.final_score,
+                "final_score": decision_breakdown.final_score,
                 "decision": decision_result.decision,
                 "candidate": best_candidate.material_code if best_candidate else None,
+                "ml_status": ml_result.status,
             },
         )
 
-        _handle_decision(db, material, analysis, best_candidate, best_breakdown, decision_result)
+        _handle_decision(db, material, analysis, best_candidate, decision_breakdown, decision_result)
 
         if material.created_by:
             notify_user(

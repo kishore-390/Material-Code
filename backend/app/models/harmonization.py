@@ -1,7 +1,7 @@
 import uuid
 from typing import Optional
 
-from sqlalchemy import ForeignKey, String, Text
+from sqlalchemy import Float, ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -21,6 +21,8 @@ class CommonMaterialCode(Base, UUIDMixin, TimestampMixin):
     created_by: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
     )
+    confidence_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    decision_status: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
 
     materials: Mapped[list["Material"]] = relationship(back_populates="common_code")
 

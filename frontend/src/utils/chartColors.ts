@@ -1,6 +1,6 @@
 // Reference palette (see dataviz skill: references/palette.md), light mode only -
 // this app does not offer a dark theme toggle.
-export const CHART_BRAND_BLUE = "#2a78d6";
+export const CHART_BRAND_BLUE = "#0b5394";
 
 export const CHART_STATUS = {
   good: "#0ca30c",

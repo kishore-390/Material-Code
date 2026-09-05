@@ -1,6 +1,6 @@
 import * as React from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
-import { Shield } from "lucide-react";
+import { Landmark } from "lucide-react";
 
 import { useAuth } from "@/auth/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -38,89 +38,89 @@ export default function Login() {
       await login({ username, password });
       navigate("/dashboard");
     } catch (err) {
-      setError(apiErrorMessage(err, "Invalid username or password"));
+      setError(apiErrorMessage(err, "Invalid User ID or Password"));
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-navy-950 p-4">
-      <div className="grid w-full max-w-4xl grid-cols-1 overflow-hidden rounded-2xl shadow-2xl md:grid-cols-2">
-        <div className="hidden flex-col justify-between bg-gradient-to-br from-navy-900 to-navy-700 p-10 text-white md:flex">
-          <div className="flex items-center gap-2">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-brand-600">
-              <Shield className="h-6 w-6" />
+    <div className="flex min-h-screen flex-col bg-slate-100">
+      <div className="gov-stripe h-[3px] w-full" />
+      <div className="border-b border-slate-300 bg-navy-950 px-6 py-3 text-center text-xs font-semibold uppercase tracking-widest text-slate-300">
+        Government of India &middot; Central Public Sector Enterprises
+      </div>
+
+      <div className="flex flex-1 items-center justify-center p-4">
+        <div className="grid w-full max-w-4xl grid-cols-1 overflow-hidden rounded border border-slate-300 shadow-card md:grid-cols-2">
+          <div className="hidden flex-col justify-between bg-navy-950 p-10 text-white md:flex">
+            <div className="flex h-10 w-10 items-center justify-center rounded border border-white/10 bg-brand-600">
+              <Landmark className="h-6 w-6" />
             </div>
+            <div>
+              <h1 className="text-2xl font-bold uppercase leading-tight tracking-wide">CPSE Material Harmonization</h1>
+              <p className="mt-4 text-xs text-slate-400">AI-Powered CPSE Material Harmonization Platform</p>
+            </div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-warning-500">Prototype for Demonstration</p>
           </div>
-          <div>
-            <h1 className="text-3xl font-bold leading-tight">
-              ONE NATION
-              <br />
-              ONE COMMON
-              <br />
-              MATERIAL CODE
-            </h1>
-            <p className="mt-4 text-sm text-slate-300">
-              AI-Powered CPSE Material Harmonization Platform
-            </p>
-          </div>
-          <p className="text-xs text-slate-400">
-            Government of India &middot; Central Public Sector Enterprises
-          </p>
+
+          <Card className="rounded-none border-0">
+            <CardContent className="p-10">
+              <h2 className="text-xl font-bold text-slate-900">CPSE Material Harmonization Platform</h2>
+              <p className="mb-6 mt-1 text-sm text-slate-500">Sign in to access your material harmonization workspace</p>
+
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="username">User ID</Label>
+                  <Input
+                    id="username"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    placeholder="e.g. admin"
+                    required
+                    autoFocus
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="password">Password</Label>
+                  <Input
+                    id="password"
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    required
+                  />
+                </div>
+                {error && <p className="text-sm text-danger-600">{error}</p>}
+                <Button type="submit" className="w-full" disabled={isSubmitting}>
+                  {isSubmitting ? "Signing in..." : "LOGIN"}
+                </Button>
+                <button type="button" className="text-xs text-brand-600 hover:underline">
+                  Forgot Password?
+                </button>
+              </form>
+
+              <div className="mt-6 rounded border border-slate-300 bg-slate-50 p-3">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                  Demo credentials (prototype only)
+                </p>
+                <ul className="space-y-1 text-xs text-slate-600">
+                  {DEMO_ACCOUNTS.map((acc) => (
+                    <li key={acc.username} className="flex justify-between">
+                      <span>{acc.role}</span>
+                      <span className="font-mono">
+                        {acc.username} / {acc.password}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <p className="mt-4 text-center text-xs text-slate-400">Authorized CPSE personnel only.</p>
+            </CardContent>
+          </Card>
         </div>
-
-        <Card className="rounded-none border-0 md:rounded-r-2xl">
-          <CardContent className="p-10">
-            <h2 className="text-xl font-bold text-slate-900">Sign in</h2>
-            <p className="mb-6 mt-1 text-sm text-slate-500">Access your material harmonization workspace</p>
-
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-1.5">
-                <Label htmlFor="username">Username</Label>
-                <Input
-                  id="username"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  placeholder="e.g. admin"
-                  required
-                  autoFocus
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="password">Password</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  required
-                />
-              </div>
-              {error && <p className="text-sm text-danger-600">{error}</p>}
-              <Button type="submit" className="w-full" disabled={isSubmitting}>
-                {isSubmitting ? "Signing in..." : "Sign in"}
-              </Button>
-            </form>
-
-            <div className="mt-6 rounded-lg bg-slate-50 p-3">
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
-                Demo credentials
-              </p>
-              <ul className="space-y-1 text-xs text-slate-600">
-                {DEMO_ACCOUNTS.map((acc) => (
-                  <li key={acc.username} className="flex justify-between">
-                    <span>{acc.role}</span>
-                    <span className="font-mono">
-                      {acc.username} / {acc.password}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </CardContent>
-        </Card>
       </div>
     </div>
   );

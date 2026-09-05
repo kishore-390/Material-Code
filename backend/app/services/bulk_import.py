@@ -43,7 +43,9 @@ def _clean(value) -> str | None:
     return text or None
 
 
-def validate_dataframe(db: Session, df: pd.DataFrame) -> list[dict]:
+def validate_dataframe(
+    db: Session, df: pd.DataFrame, default_cpse: CPSEOrganization | None = None
+) -> list[dict]:
     known_cpse_codes = {row.code for row in db.query(CPSEOrganization.code).all()}
     seen_in_file: set[tuple[str, str]] = set()
     results: list[dict] = []
@@ -56,7 +58,8 @@ def validate_dataframe(db: Session, df: pd.DataFrame) -> list[dict]:
         description = data["description"]
         uom = data["uom"]
         category = data["category"]
-        cpse_code = (data["cpse"] or "").upper()
+        cpse_code = (data["cpse"] or (default_cpse.code if default_cpse else "") or "").upper()
+        data["cpse"] = cpse_code or None
 
         if not code:
             errors.append("Missing material code")

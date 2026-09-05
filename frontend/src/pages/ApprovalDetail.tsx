@@ -1,9 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, Check } from "lucide-react";
 import * as React from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 
 import { useAuth } from "@/auth/AuthContext";
+import { PageHeader } from "@/components/PageHeader";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -51,55 +52,65 @@ export default function ApprovalDetailPage() {
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-slate-900">Approval Review</h1>
-          <p className="text-sm text-slate-500">
-            AI Score: {approval.ai_score ? `${approval.ai_score.toFixed(1)}%` : "Manual request"}
-          </p>
-        </div>
-        <StatusBadge status={approval.status} />
-      </div>
+      <PageHeader
+        breadcrumbs={[{ label: "Governance", to: "/approvals" }, { label: "Approval Review" }]}
+        title="Approval Review"
+        subtitle="Official administrative review of an AI-assisted or manual harmonization request."
+        actions={<StatusBadge status={approval.status} />}
+      />
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Original Material</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-1 text-sm">
-            <p className="font-semibold">{approval.material.material_code}</p>
-            <p>{approval.material.description}</p>
-            <p className="text-slate-500">{approval.material.specification}</p>
-            <p className="text-slate-500">
-              {approval.material.category} &middot; {approval.material.uom} &middot; {approval.material.cpse.code}
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Candidate Material</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-1 text-sm">
-            {approval.candidate ? (
-              <>
-                <p className="font-semibold">{approval.candidate.material_code}</p>
-                <p>{approval.candidate.description}</p>
-                <p className="text-slate-500">{approval.candidate.specification}</p>
-                <p className="text-slate-500">
-                  {approval.candidate.category} &middot; {approval.candidate.uom} &middot; {approval.candidate.cpse.code}
-                </p>
-              </>
-            ) : (
-              <p className="text-slate-400">No candidate - manual harmonization request</p>
-            )}
-          </CardContent>
-        </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>AI Assessment</CardTitle>
+        </CardHeader>
+        <CardContent className="text-sm text-slate-600">
+          AI Confidence: <span className="font-semibold text-slate-900">{approval.ai_score ? `${approval.ai_score.toFixed(1)}%` : "Manual request"}</span>
+          {approval.reason && <p className="mt-1 text-slate-500">{approval.reason}</p>}
+        </CardContent>
+      </Card>
+
+      <div>
+        <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-slate-400">Source Materials</p>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <Card>
+            <CardHeader>
+              <CardTitle>Original Material</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-1 text-sm">
+              <p className="font-semibold">{approval.material.material_code}</p>
+              <p>{approval.material.description}</p>
+              <p className="text-slate-500">{approval.material.specification}</p>
+              <p className="text-slate-500">
+                {approval.material.category} &middot; {approval.material.uom} &middot; {approval.material.cpse.code}
+              </p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>Candidate Material</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-1 text-sm">
+              {approval.candidate ? (
+                <>
+                  <p className="font-semibold">{approval.candidate.material_code}</p>
+                  <p>{approval.candidate.description}</p>
+                  <p className="text-slate-500">{approval.candidate.specification}</p>
+                  <p className="text-slate-500">
+                    {approval.candidate.category} &middot; {approval.candidate.uom} &middot; {approval.candidate.cpse.code}
+                  </p>
+                </>
+              ) : (
+                <p className="text-slate-400">No candidate - manual harmonization request</p>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       </div>
 
       {approval.comparison.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>Field-by-Field Comparison</CardTitle>
+            <CardTitle>AI Evidence — Field-by-Field Comparison</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
             {approval.comparison.map((c) => (
@@ -123,7 +134,7 @@ export default function ApprovalDetailPage() {
       {approval.actions.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>Decision History</CardTitle>
+            <CardTitle>Approval History</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2 text-sm">
             {approval.actions.map((action) => (
@@ -142,9 +153,12 @@ export default function ApprovalDetailPage() {
       {canAct && (
         <Card>
           <CardHeader>
-            <CardTitle>Take Action</CardTitle>
+            <CardTitle>Officer Decision</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
+            <p className="text-xs text-slate-500">
+              Approving or merging this request will generate (or reuse) a Common Material Code automatically.
+            </p>
             <Textarea
               placeholder="Approval remarks (optional, e.g. Specification and dimensions verified.)"
               value={remarks}
@@ -166,6 +180,14 @@ export default function ApprovalDetailPage() {
           </CardContent>
         </Card>
       )}
+
+      <p className="text-xs text-slate-400">
+        Every action on this request is recorded in the{" "}
+        <Link to="/audit-log" className="text-brand-600 hover:underline">
+          Audit Log
+        </Link>
+        .
+      </p>
     </div>
   );
 }

@@ -21,3 +21,4 @@ from app.models.approval import ApprovalRequest, ApprovalAction  # noqa: E402,F4
 from app.models.audit import AuditLog  # noqa: E402,F401
 from app.models.notification import Notification  # noqa: E402,F401
 from app.models.settings import SystemSetting  # noqa: E402,F401
+from app.models.upload_batch import UploadBatch  # noqa: E402,F401

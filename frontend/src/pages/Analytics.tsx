@@ -1,20 +1,29 @@
 import { useQuery } from "@tanstack/react-query";
+import * as React from "react";
 
 import { ConfidenceDistributionChart } from "@/charts/ConfidenceDistributionChart";
 import { MonthlyTrendChart } from "@/charts/MonthlyTrendChart";
 import { SimpleBarChart } from "@/charts/SimpleBarChart";
+import { OrganizationSelect } from "@/components/OrganizationSelect";
+import { PageHeader } from "@/components/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getTrends } from "@/services/dashboard";
 
 export default function Analytics() {
-  const { data: trends } = useQuery({ queryKey: ["dashboard", "trends"], queryFn: getTrends });
+  const [cpseId, setCpseId] = React.useState("");
+  const { data: trends } = useQuery({
+    queryKey: ["dashboard", "trends", cpseId],
+    queryFn: () => getTrends(cpseId),
+  });
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-bold text-slate-900">Analytics</h1>
-        <p className="text-sm text-slate-500">Deeper insight into harmonization performance and savings.</p>
-      </div>
+      <PageHeader
+        breadcrumbs={[{ label: "Reports & Monitoring", to: "/analytics" }, { label: "Analytics" }]}
+        title="Analytics"
+        subtitle="Deeper insight into harmonization performance and savings."
+        actions={<OrganizationSelect includeAllOption value={cpseId} onChange={(e) => setCpseId(e.target.value)} className="max-w-[220px]" />}
+      />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
@@ -27,7 +36,7 @@ export default function Analytics() {
         </Card>
         <Card>
           <CardHeader>
-            <CardTitle>Monthly Harmonization Trend</CardTitle>
+            <CardTitle>Material Harmonization Trend</CardTitle>
           </CardHeader>
           <CardContent>
             <MonthlyTrendChart data={trends?.monthly_trend ?? []} />
@@ -35,7 +44,7 @@ export default function Analytics() {
         </Card>
         <Card>
           <CardHeader>
-            <CardTitle>Materials by CPSE</CardTitle>
+            <CardTitle>CPSE-wise Material Distribution</CardTitle>
           </CardHeader>
           <CardContent>
             <SimpleBarChart data={trends?.materials_by_cpse ?? []} />
@@ -46,12 +55,12 @@ export default function Analytics() {
             <CardTitle>Harmonized Materials by CPSE</CardTitle>
           </CardHeader>
           <CardContent>
-            <SimpleBarChart data={trends?.harmonized_by_cpse ?? []} color="#0ca30c" />
+            <SimpleBarChart data={trends?.harmonized_by_cpse ?? []} color="#138808" />
           </CardContent>
         </Card>
         <Card>
           <CardHeader>
-            <CardTitle>Duplicate Material Reduction (by category)</CardTitle>
+            <CardTitle>Duplicate Reduction Trend (by category)</CardTitle>
           </CardHeader>
           <CardContent>
             <SimpleBarChart data={trends?.duplicate_reduction ?? []} color="#4a3aa7" />

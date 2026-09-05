@@ -1,8 +1,9 @@
 import uuid
+from datetime import datetime
 from typing import Optional
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import ForeignKey, Index, String, Text
+from sqlalchemy import DateTime, ForeignKey, Index, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -42,6 +43,13 @@ class Material(Base, UUIDMixin, TimestampMixin):
     created_by: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
     )
+
+    # Source-system provenance (spec: "fetch by code" from an external CPSE ERP/database
+    # rather than manual entry). Null for materials created by hand or CSV/Excel upload.
+    source_system: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    source_database: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, index=True)
+    source_material_code: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, index=True)
+    last_synced_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     cpse: Mapped["CPSEOrganization"] = relationship(back_populates="materials")
     common_code: Mapped[Optional["CommonMaterialCode"]] = relationship(back_populates="materials")

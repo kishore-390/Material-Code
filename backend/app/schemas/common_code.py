@@ -16,6 +16,8 @@ class CommonMaterialCodeOut(BaseModel):
     standard_specification: Optional[str] = None
     uom: str
     status: str
+    confidence_score: Optional[float] = None
+    decision_status: Optional[str] = None
     created_at: datetime
 
     class Config:

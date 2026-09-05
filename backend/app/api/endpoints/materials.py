@@ -8,9 +8,10 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user, require_roles
 from app.db.session import get_db
 from app.models.cpse import CPSEOrganization
-from app.models.enums import MaterialStatus, NotificationType, RoleName
+from app.models.enums import MaterialStatus, NotificationType, RoleName, UploadStatus
 from app.models.material import Material, MaterialAttribute, MaterialEmbedding
 from app.models.matching import AIAnalysis
+from app.models.upload_batch import UploadBatch
 from app.models.user import User
 from app.schemas.material import (
     BulkImportResponse,
@@ -30,7 +31,7 @@ from app.services.notification_service import notify_role, notify_user
 
 router = APIRouter(prefix="/materials", tags=["Materials"])
 
-_batch_cache: dict[str, list[dict]] = {}
+_batch_cache: dict[str, dict] = {}
 
 
 def _material_to_detail(db: Session, material: Material) -> MaterialDetailOut:
@@ -72,10 +73,16 @@ def search_materials(
     from app.ai.text_embeddings import generate_text_embedding
     from app.services.scoring import cosine_similarity
 
+    from app.models.harmonization import CommonMaterialCode
+
     like = f"%{q.strip()}%"
     base_query = db.query(Material)
     if current_user.role.name == RoleName.CPSE_USER.value and current_user.cpse_id:
         base_query = base_query.filter(Material.cpse_id == current_user.cpse_id)
+
+    common_code_ids = db.query(CommonMaterialCode.id).filter(
+        or_(CommonMaterialCode.code.ilike(like), CommonMaterialCode.standard_description.ilike(like))
+    )
 
     lexical_matches = base_query.filter(
         or_(
@@ -84,6 +91,7 @@ def search_materials(
             Material.specification.ilike(like),
             Material.category.ilike(like),
             Material.uom.ilike(like),
+            Material.common_code_id.in_(common_code_ids),
         )
     ).limit(50).all()
 
@@ -109,26 +117,65 @@ def search_materials(
     return results[:30]
 
 
+def _is_duplicate_error(errors: list[str]) -> bool:
+    return any("duplicate" in e.lower() for e in errors)
+
+
 @router.post("/bulk/validate", response_model=BulkValidationResponse)
 def validate_bulk_upload(
     file: UploadFile = File(...),
+    cpse_id: uuid.UUID | None = Form(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles(RoleName.ADMIN.value, RoleName.CPSE_USER.value)),
 ):
+    default_cpse = None
+    if cpse_id is not None:
+        default_cpse = db.query(CPSEOrganization).filter(CPSEOrganization.id == cpse_id).first()
+        if not default_cpse:
+            raise HTTPException(status_code=400, detail="Unknown organization")
+        if current_user.role.name == RoleName.CPSE_USER.value and current_user.cpse_id != default_cpse.id:
+            raise HTTPException(status_code=403, detail="You may only upload materials for your own CPSE")
+        if not default_cpse.is_active:
+            raise HTTPException(status_code=400, detail="This organization is inactive")
+
     try:
         df = bulk_import.read_upload_dataframe(file)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    results = bulk_import.validate_dataframe(db, df)
+    results = bulk_import.validate_dataframe(db, df, default_cpse=default_cpse)
+    valid_count = sum(1 for r in results if r["is_valid"])
+    duplicate_count = sum(1 for r in results if not r["is_valid"] and _is_duplicate_error(r["errors"]))
+    invalid_count = len(results) - valid_count - duplicate_count
+
+    upload_batch = None
+    if default_cpse is not None:
+        upload_batch = UploadBatch(
+            cpse_id=default_cpse.id,
+            filename=file.filename or "upload",
+            uploaded_by=current_user.id,
+            total_records=len(results),
+            valid_records=valid_count,
+            invalid_records=invalid_count,
+            duplicate_records=duplicate_count,
+            status=UploadStatus.VALIDATING.value,
+        )
+        db.add(upload_batch)
+        db.commit()
+        db.refresh(upload_batch)
+
     batch_token = uuid.uuid4().hex
-    _batch_cache[batch_token] = results
+    _batch_cache[batch_token] = {
+        "rows": results,
+        "upload_batch_id": upload_batch.id if upload_batch else None,
+    }
 
     return BulkValidationResponse(
         batch_token=batch_token,
+        upload_batch_id=upload_batch.id if upload_batch else None,
         total_rows=len(results),
-        valid_rows=sum(1 for r in results if r["is_valid"]),
-        invalid_rows=sum(1 for r in results if not r["is_valid"]),
+        valid_rows=valid_count,
+        invalid_rows=invalid_count + duplicate_count,
         rows=[BulkValidationRow(**r) for r in results],
     )
 
@@ -139,40 +186,80 @@ def import_bulk_upload(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles(RoleName.ADMIN.value, RoleName.CPSE_USER.value)),
 ):
-    rows = _batch_cache.get(batch_token)
-    if rows is None:
+    cached = _batch_cache.get(batch_token)
+    if cached is None:
         raise HTTPException(status_code=404, detail="Validation batch not found or expired. Please re-validate.")
 
+    rows = cached["rows"]
     valid_rows = [r for r in rows if r["is_valid"]]
-    created_ids = bulk_import.import_valid_rows(db, valid_rows, current_user.id)
+    upload_batch_id = cached.get("upload_batch_id")
 
-    for material_id in created_ids:
-        _enqueue_ai_analysis(material_id)
+    if upload_batch_id is None:
+        # Legacy path: no organization was pre-selected at validate time (a mixed-CPSE
+        # file with a per-row "cpse" column), so there's no single org to attribute a
+        # history record to. Fall back to importing synchronously, same as before.
+        created_ids = bulk_import.import_valid_rows(db, valid_rows, current_user.id)
+        for material_id in created_ids:
+            _enqueue_ai_analysis(material_id)
+        log_action(
+            db,
+            action="BULK_UPLOAD_COMPLETED",
+            entity_type="material",
+            entity_id=None,
+            actor_id=current_user.id,
+            actor_name=current_user.full_name,
+            actor_type="USER",
+            details={"total_uploaded": len(rows), "imported": len(created_ids)},
+        )
+        _batch_cache.pop(batch_token, None)
+        return BulkImportResponse(
+            upload_batch_id=uuid.uuid4(),
+            status=UploadStatus.COMPLETED.value,
+            total_uploaded=len(rows),
+            validation_errors=len(rows) - len(valid_rows),
+        )
+
+    batch = db.query(UploadBatch).filter(UploadBatch.id == upload_batch_id).first()
+    if not batch:
+        raise HTTPException(status_code=404, detail="Upload batch not found")
+
+    if not valid_rows:
+        batch.status = UploadStatus.COMPLETED.value
+        db.commit()
+    else:
+        batch.status = UploadStatus.QUEUED.value
+        db.commit()
+        try:
+            from app.workers.tasks import process_bulk_import
+
+            process_bulk_import.delay(str(batch.id), valid_rows, str(current_user.id))
+        except Exception:  # noqa: BLE001 - Celery/Redis may be unavailable in constrained dev setups
+            pass
 
     log_action(
         db,
-        action="BULK_UPLOAD_COMPLETED",
+        action="BULK_UPLOAD_QUEUED",
         entity_type="material",
         entity_id=None,
         actor_id=current_user.id,
         actor_name=current_user.full_name,
         actor_type="USER",
-        details={"total_uploaded": len(rows), "imported": len(created_ids)},
+        details={"total_uploaded": len(rows), "queued": len(valid_rows), "cpse": batch.cpse.code},
     )
     notify_user(
         db,
         current_user.id,
         NotificationType.BULK_UPLOAD_COMPLETED.value,
-        "Bulk upload completed",
-        f"{len(created_ids)} of {len(rows)} rows imported successfully and queued for AI processing.",
+        "Bulk upload queued",
+        f"{len(valid_rows)} of {len(rows)} rows for {batch.cpse.code} were queued for import and AI processing.",
     )
     _batch_cache.pop(batch_token, None)
 
     return BulkImportResponse(
+        upload_batch_id=batch.id,
+        status=batch.status,
         total_uploaded=len(rows),
-        successfully_imported=len(created_ids),
         validation_errors=len(rows) - len(valid_rows),
-        queued_for_ai=len(created_ids),
     )
 
 

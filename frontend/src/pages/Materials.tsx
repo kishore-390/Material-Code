@@ -2,6 +2,8 @@ import { useQuery } from "@tanstack/react-query";
 import * as React from "react";
 import { Link } from "react-router-dom";
 
+import { OrganizationSelect } from "@/components/OrganizationSelect";
+import { PageHeader } from "@/components/PageHeader";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,17 +22,19 @@ export default function Materials() {
   const [q, setQ] = React.useState("");
   const [category, setCategory] = React.useState("");
   const [status, setStatus] = React.useState("");
+  const [cpseId, setCpseId] = React.useState("");
   const [page, setPage] = React.useState(1);
   const pageSize = 15;
   const debouncedQ = useDebounce(q);
 
   const { data, isLoading } = useQuery({
-    queryKey: ["materials", { q: debouncedQ, category, status, page }],
+    queryKey: ["materials", { q: debouncedQ, category, status, cpseId, page }],
     queryFn: () =>
       listMaterials({
         q: debouncedQ || undefined,
         category: category || undefined,
         status: status || undefined,
+        cpse_id: cpseId || undefined,
         page,
         page_size: pageSize,
       }),
@@ -40,15 +44,11 @@ export default function Materials() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-slate-900">Materials</h1>
-          <p className="text-sm text-slate-500">{data?.total ?? 0} materials in the catalogue</p>
-        </div>
-        <Button asChild>
-          <Link to="/materials/upload">Upload Material</Link>
-        </Button>
-      </div>
+      <PageHeader
+        breadcrumbs={[{ label: "Material Management", to: "/materials" }, { label: "Materials" }]}
+        title="Materials"
+        subtitle={`${data?.total ?? 0} materials in the catalogue`}
+      />
 
       <div className="flex flex-wrap gap-3">
         <Input
@@ -59,6 +59,15 @@ export default function Materials() {
             setPage(1);
           }}
           className="max-w-xs"
+        />
+        <OrganizationSelect
+          includeAllOption
+          value={cpseId}
+          onChange={(e) => {
+            setCpseId(e.target.value);
+            setPage(1);
+          }}
+          className="max-w-[220px]"
         />
         <Select
           value={category}
@@ -95,6 +104,7 @@ export default function Materials() {
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead className="w-12">Sl.No.</TableHead>
             <TableHead>Material Code</TableHead>
             <TableHead>Description</TableHead>
             <TableHead>Category</TableHead>
@@ -107,20 +117,21 @@ export default function Materials() {
         <TableBody>
           {isLoading && (
             <TableRow>
-              <TableCell colSpan={7} className="text-center text-slate-400">
+              <TableCell colSpan={8} className="text-center text-slate-400">
                 Loading...
               </TableCell>
             </TableRow>
           )}
           {!isLoading && (data?.items.length ?? 0) === 0 && (
             <TableRow>
-              <TableCell colSpan={7} className="text-center text-slate-400">
+              <TableCell colSpan={8} className="text-center text-slate-400">
                 No materials found.
               </TableCell>
             </TableRow>
           )}
-          {data?.items.map((material) => (
+          {data?.items.map((material, idx) => (
             <TableRow key={material.id}>
+              <TableCell className="text-slate-400">{(page - 1) * pageSize + idx + 1}</TableCell>
               <TableCell>
                 <Link to={`/materials/${material.id}`} className="font-medium text-brand-600 hover:underline">
                   {material.material_code}

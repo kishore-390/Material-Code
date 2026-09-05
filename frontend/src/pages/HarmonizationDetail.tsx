@@ -3,6 +3,7 @@ import * as React from "react";
 import { useParams } from "react-router-dom";
 
 import { useAuth } from "@/auth/AuthContext";
+import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -44,8 +45,9 @@ export default function HarmonizationDetail() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex items-center justify-between border-b border-slate-300 pb-4">
+        <div className="space-y-2">
+          <Breadcrumbs items={[{ label: "AI Harmonization", to: "/harmonization" }, { label: "Request Detail" }]} />
           <h1 className="text-xl font-bold text-slate-900">Harmonization Request</h1>
           <p className="text-sm text-slate-500">{h.request_type} request</p>
         </div>

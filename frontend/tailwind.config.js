@@ -6,17 +6,27 @@ export default {
     extend: {
       colors: {
         navy: {
-          950: "#0b1220",
-          900: "#0f1b31",
-          800: "#152544",
-          700: "#1c2f57",
+          950: "#0a1526",
+          900: "#0e1d33",
+          800: "#132a49",
+          700: "#1a3a63",
         },
         brand: {
-          50: "#eff6ff",
-          100: "#dbeafe",
-          500: "#2563eb",
-          600: "#1d4ed8",
-          700: "#1e40af",
+          50: "#eaf2fb",
+          100: "#cfe1f4",
+          500: "#0b5394",
+          600: "#0a4a83",
+          700: "#073761",
+        },
+        saffron: {
+          50: "#fff5e8",
+          500: "#ff9933",
+          600: "#e07f16",
+        },
+        flag: {
+          50: "#eaf7e9",
+          500: "#138808",
+          600: "#0f6d07",
         },
         success: {
           50: "#ecfdf5",
@@ -34,8 +44,19 @@ export default {
           600: "#b91c1c",
         },
       },
+      fontFamily: {
+        sans: ["'Noto Sans'", "'Noto Sans Devanagari'", "ui-sans-serif", "system-ui", "sans-serif"],
+      },
+      borderRadius: {
+        sm: "2px",
+        DEFAULT: "3px",
+        md: "4px",
+        lg: "5px",
+        xl: "6px",
+        "2xl": "6px",
+      },
       boxShadow: {
-        card: "0 1px 3px 0 rgb(0 0 0 / 0.06), 0 1px 2px -1px rgb(0 0 0 / 0.06)",
+        card: "0 1px 2px 0 rgb(0 0 0 / 0.05)",
       },
     },
   },

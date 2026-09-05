@@ -4,14 +4,14 @@ import { cn } from "@/utils/cn";
 
 export function Table({ className, ...props }: React.TableHTMLAttributes<HTMLTableElement>) {
   return (
-    <div className="w-full overflow-x-auto rounded-lg border border-slate-200">
+    <div className="w-full overflow-x-auto rounded border border-slate-300">
       <table className={cn("w-full caption-bottom text-sm", className)} {...props} />
     </div>
   );
 }
 
 export function TableHeader({ className, ...props }: React.HTMLAttributes<HTMLTableSectionElement>) {
-  return <thead className={cn("bg-slate-50 [&_tr]:border-b", className)} {...props} />;
+  return <thead className={cn("bg-slate-100 [&_tr]:border-b [&_tr]:border-slate-300", className)} {...props} />;
 }
 
 export function TableBody({ className, ...props }: React.HTMLAttributes<HTMLTableSectionElement>) {

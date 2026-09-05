@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Bell, BellRing } from "lucide-react";
 
+import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { listNotifications, markNotificationRead } from "@/services/notifications";
@@ -16,10 +17,11 @@ export default function Notifications() {
 
   return (
     <div className="mx-auto max-w-2xl space-y-4">
-      <div>
-        <h1 className="text-xl font-bold text-slate-900">Notifications</h1>
-        <p className="text-sm text-slate-500">Uploads, AI results, approvals and system events.</p>
-      </div>
+      <PageHeader
+        breadcrumbs={[{ label: "Reports & Monitoring", to: "/notifications" }, { label: "Notifications" }]}
+        title="Notifications"
+        subtitle="Uploads, AI results, approvals and system events."
+      />
 
       {isLoading && <p className="text-sm text-slate-400">Loading...</p>}
       {!isLoading && (data ?? []).length === 0 && (

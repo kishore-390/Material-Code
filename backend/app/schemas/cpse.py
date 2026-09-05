@@ -9,6 +9,17 @@ class CPSECreate(BaseModel):
     code: str
     name: str
     sector: Optional[str] = None
+    description: Optional[str] = None
+
+
+class CPSEUpdate(BaseModel):
+    name: Optional[str] = None
+    sector: Optional[str] = None
+    description: Optional[str] = None
+
+
+class CPSEStatusUpdate(BaseModel):
+    is_active: bool
 
 
 class CPSEOut(BaseModel):
@@ -16,6 +27,8 @@ class CPSEOut(BaseModel):
     code: str
     name: str
     sector: Optional[str] = None
+    description: Optional[str] = None
+    logo_url: Optional[str] = None
     is_active: bool
     created_at: datetime
 
