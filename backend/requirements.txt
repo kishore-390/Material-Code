@@ -19,10 +19,16 @@ sentence-transformers==3.1.1
 xgboost==2.1.1
 
 # Required by FastAPI/Starlette to parse multipart/form-data request bodies -
-# needed only for the demo-only CSV import file upload endpoint
-# (app.api.endpoints.demo_import). Not the old bulk-upload/ERP dependency set
-# removed in the rebuild; this is a Starlette-level parsing requirement.
+# needed for the file upload endpoints (app.api.endpoints.demo_import,
+# app.api.endpoints.material_upload). Not the old bulk-upload/ERP dependency
+# set removed in the rebuild; this is a Starlette-level parsing requirement.
 python-multipart==0.0.12
+
+# Excel (.xlsx) parsing for app.api.endpoints.material_upload's company
+# self-service upload (CSV is parsed with the stdlib csv module - no
+# dependency needed there). Deliberately NOT paired with pandas - openpyxl
+# alone is enough to read column headers + rows.
+openpyxl==3.1.5
 
 # Source connector drivers (spec section 26) - PostgreSQL uses psycopg
 # above; MySQL uses the pure-Python driver below, no system dependency.

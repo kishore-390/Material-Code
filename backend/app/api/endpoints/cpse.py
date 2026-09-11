@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user, require_roles
+from app.api.deps import assert_cpse_access, get_current_user, require_roles
 from app.db.session import get_db
 from app.models.cpse import CPSE
 from app.models.enums import MappingDecisionStatus, MappingType, RoleName
@@ -77,7 +77,13 @@ def _get_or_404(db: Session, cpse_id: uuid.UUID) -> CPSE:
 
 @router.get("", response_model=list[CPSEStats])
 def list_cpse(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    cpses = db.query(CPSE).order_by(CPSE.name).all()
+    """A company-scoped user only ever sees their own company's row here -
+    "Each company should only be able to access its own material database"
+    applies to the CPSE roster too, not just the materials underneath it."""
+    query = db.query(CPSE)
+    if current_user.cpse_id is not None:
+        query = query.filter(CPSE.id == current_user.cpse_id)
+    cpses = query.order_by(CPSE.name).all()
     return [_stats_for(db, c) for c in cpses]
 
 
@@ -99,6 +105,7 @@ def create_cpse(
 
 @router.get("/{cpse_id}", response_model=CPSEStats)
 def get_cpse(cpse_id: uuid.UUID, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    assert_cpse_access(current_user, cpse_id)
     return _stats_for(db, _get_or_404(db, cpse_id))
 
 

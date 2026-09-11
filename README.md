@@ -29,11 +29,16 @@ harmonized *national view* on top of automatically-synchronized copies of that d
 ## 2. Architecture
 
 ```
-CPSE source databases (Postgres / MySQL / Oracle / SQL Server)
-        |  secure, read-only connector (app.connectors)
-        v
-Automatic ingestion (full + incremental sync, app.connectors.sync_engine)
-        |
+CPSE source databases (Postgres / MySQL / Oracle / SQL Server)   Company's own CSV/Excel
+        |  secure, read-only connector (app.connectors)          material master export
+        v                                                                |
+Automatic ingestion (full + incremental sync,          Governed self-service upload
+        app.connectors.sync_engine)                    (app.api.endpoints.material_upload,
+        |                                                strictly scoped to the uploader's
+        |                                                own CPSE - see section 5)
+        v                                                                |
+        +---------------------------  both paths share  -----------------+
+        |                              app.services.material_ingestion
         v
 Central material database (cpse_materials) ── validation, cleaning, normalization,
         |                                       attribute extraction
@@ -82,6 +87,9 @@ available, and never silently fabricates a score.
 implemented; Oracle and SQL Server are interface-complete and activate once their
 optional vendor drivers (`oracledb`, `pyodbc`) are installed.
 
+**File upload parsing:** stdlib `csv` for `.csv`, `openpyxl` for `.xlsx` — no `pandas`
+dependency; `python-multipart` for FastAPI's multipart/form-data handling.
+
 ---
 
 ## 4. Project Structure
@@ -97,25 +105,29 @@ material/
 │   │   ├── schemas/                Pydantic request/response models
 │   │   ├── connectors/             SourceConnector interface + Postgres/MySQL/
 │   │   │                           Oracle/SQL Server implementations + sync engine
-│   │   ├── api/endpoints/          auth, cpse-materials, common-materials,
-│   │   │                           harmonization, approvals, synchronization,
-│   │   │                           procurement, analytics, dashboard, audit,
-│   │   │                           notifications, settings
+│   │   ├── api/endpoints/          auth, cpse-materials, material_upload (company
+│   │   │                           self-service upload), demo_import (DEMO ONLY admin
+│   │   │                           CSV import), common-materials, harmonization,
+│   │   │                           approvals, synchronization, procurement, analytics,
+│   │   │                           dashboard, audit, notifications, settings
 │   │   ├── services/               normalization, scoring, decision_engine,
 │   │   │                           code_generator, harmonization_service (governance),
 │   │   │                           duplicate_service, duplicate_code_service,
-│   │   │                           procurement_service, attribute_extraction
+│   │   │                           procurement_service, attribute_extraction,
+│   │   │                           material_ingestion (shared upsert core used by
+│   │   │                           connectors AND both upload paths),
+│   │   │                           csv_import_service (shared CSV/Excel parse+validate)
 │   │   ├── ai/                     text embeddings, similarity, conflict detector,
 │   │   │                           XGBoost ranker, analyzer (pipeline orchestrator)
 │   │   ├── workers/                Celery app + sync/AI-analysis tasks
 │   │   ├── seed.py                 roles + one ADMIN login - zero business data
 │   │   └── demo_seed.py            OPT-IN demo CPSEs + demo source tables + real sync
 │   ├── alembic/                    migrations (0001_initial creates the full schema)
-│   ├── tests/                      pytest suite (see section 13)
+│   ├── tests/                      pytest suite (see section 19)
 │   └── Dockerfile
 ├── frontend/
 │   ├── src/
-│   │   ├── pages/                  one file per route (see section 8)
+│   │   ├── pages/                  one file per route (see section 21)
 │   │   ├── components/, components/ui/   shared UI + design-system primitives
 │   │   ├── services/                Axios API clients
 │   │   └── types/                   shared TypeScript types
@@ -128,9 +140,9 @@ material/
 
 ## 5. Data Ingestion & the Database Connector Architecture
 
-There is **no manual material entry and no CSV/Excel upload** anywhere in this
-platform. Every CPSE material arrives through a `source_connections` row (spec
-section 5.6) — a secure, read-only database connector configuration:
+**Production material data is connector-first, not upload-first.** The primary,
+recommended way a CPSE's material master enters this platform is a `source_connections`
+row (spec section 5.6) — a secure, read-only database connector configuration:
 
 - `database_type`: `POSTGRESQL` | `MYSQL` | `ORACLE` | `SQLSERVER`
 - `host` / `port` / `database_name` / `table_name`
@@ -152,6 +164,30 @@ never silently reassigned by a later sync (see `app.ai.analyzer._handle_decision
 Adding a new CPSE that uses an already-supported database type requires **no code
 change** — only a new `source_connections` row plus the credential environment
 variables it names.
+
+### CSV / Excel upload — two governed exceptions, not a second ingestion architecture
+
+Two upload paths exist **on top of**, not instead of, the connector architecture above.
+Both parse a file into the exact same `CanonicalMaterialRecord` shape a connector
+produces and feed it through the identical `app.services.material_ingestion` →
+AI pipeline → settlement path — there is no separate upload-specific matching logic.
+
+| | `POST /api/materials/upload/*` | `POST /api/demo-import/*` |
+|---|---|---|
+| Audience | A CPSE's own **Company Admin / Company User** (or a central admin uploading on a CPSE's behalf) | **Admin only**, for live demonstrations |
+| Data marked | `is_demo_data = False` — real production data | `is_demo_data = True` — always, permanently |
+| CPSE scope | Strictly the uploader's own CPSE (`app.api.deps.scoped_cpse_id`) — a company user can never target another company | Any already-onboarded CPSE |
+| Can create a new CPSE? | No | No |
+| Can overwrite existing data? | Yes — a company re-uploading its own real data is a normal update, same as a connector re-sync | Never overwrites real (non-demo) data; refuses with a clear error |
+| File formats | `.csv`, `.xlsx` | `.csv` |
+| Frontend page | **Material Master → Upload Materials** | **CPSE Network → Demo Data Import** ("DEMO ONLY" labeled) |
+
+This exists because a CPSE onboarding this platform for the first time will not
+always have a live, reachable database connector ready on day one — a governed
+self-service upload of their own real material master is a legitimate production
+path, provided it can never leak into or overwrite another company's data, and never
+lets an upload masquerade as automated connector data. See
+`app/services/csv_import_service.py` for the shared validation/import core.
 
 ---
 
@@ -273,6 +309,16 @@ free-form `details` blob — see `app/services/audit_service.py`.
   validate_identifier`) — closing the SQL-injection surface outright.
 - Roles: `ADMIN`, `MATERIAL_EXPERT`, `REVIEWER`, `VIEWER` (spec section 31).
 - JWT auth (`python-jose`), bcrypt password hashing.
+- **Company-level data isolation** (`app.api.deps.scoped_cpse_id` / `assert_cpse_access`):
+  a user registered against a specific CPSE (`users.cpse_id` set — a "Company
+  Admin"/"Company User" in the sense of section 1) can only ever list/view/search/
+  upload materials for their own company; any `cpse_id` they pass in a request is
+  verified against their own, never trusted outright. This applies to
+  `/api/cpse-materials`, `/api/cpse`, `/api/materials/upload/*`, and blocks
+  cross-company `/api/cpse-materials/{id}/similar` and the aggregate
+  `/api/dashboard/*` endpoints outright. A central user (no `cpse_id` — the "Central/
+  Admin/Human Approval user") is unrestricted, since cross-company comparison is the
+  entire point of the harmonization/approval workflow.
 
 ---
 
@@ -293,6 +339,32 @@ docker compose exec backend python -m app.seed
 After `python -m app.seed`, the central database is empty (zero CPSEs, materials,
 common materials, mappings) except the four roles and one `admin` login — exactly as
 spec section 43 requires. Log in as `admin` / `Admin@123` and change the password.
+
+### Demo users
+
+| Username | Password | Role | Company | Notes |
+|---|---|---|---|---|
+| `admin` | `Admin@123` | ADMIN | *(central, no CPSE)* | Created by `python -m app.seed`; full cross-company/central access. |
+
+There is no other pre-seeded login — `app.seed` intentionally creates only this one
+account (spec section 43's "zero business data" requirement). To demonstrate the
+company/central role split described in this project's brief, register additional
+users via `POST /api/auth/register` (or the Login page's registration flow, if
+enabled) after running `app.demo_seed` (which creates the `IOCL`, `ONGC`, `BPCL`
+CPSEs):
+
+```bash
+curl -X POST http://localhost:8000/api/auth/register -H "Content-Type: application/json" -d '{
+  "username": "iocl_manager", "email": "iocl_manager@iocl.example",
+  "full_name": "IOCL Material Manager", "password": "Company@123",
+  "role_name": "MATERIAL_EXPERT", "cpse_code": "IOCL"
+}'
+```
+
+A user registered **with** a `cpse_code` is a *Company Admin/User* — scoped to that
+one CPSE everywhere in the API (see section 14). A user registered **without** one is
+a *Central/Admin/Approval* user — unrestricted, for cross-company harmonization,
+approval, and dashboard analytics.
 
 ### Demo data (opt-in, clearly separate from production data)
 
@@ -358,11 +430,54 @@ SQL-injection-safe identifier validation, paging, and incremental cursoring agai
 throwaway SQLite database (`test_connectors.py`), mapping governance/idempotency and
 the approved-mapping-protection invariant (`test_mapping_governance.py`), JWT
 auth/RBAC (`test_auth.py`), CPSE/material/legacy-code/duplicate-detection read APIs,
-and the XGBoost fallback + safety-gate blend logic (`test_xgboost_ranker.py`).
+automatic batch settlement/convergence (`test_sync_settlement.py`), the DEMO ONLY
+admin CSV import (`test_csv_import.py`), the company self-service CSV/Excel upload
+(`test_material_upload.py`), per-company data isolation/RBAC
+(`test_company_data_isolation.py`), and the XGBoost fallback + safety-gate blend
+logic (`test_xgboost_ranker.py`). 122 tests, all passing.
 
 ---
 
-## 20. Terminology
+## 20. API Endpoint Reference
+
+| Area | Endpoints |
+|---|---|
+| Auth | `POST /api/auth/register`, `POST /api/auth/login`, `GET /api/auth/me` |
+| CPSE roster | `GET/POST /api/cpse`, `GET/PUT/PATCH /api/cpse/{id}` *(company-scoped)* |
+| Materials | `GET /api/cpse-materials`, `GET /api/cpse-materials/search`, `GET /api/cpse-materials/{id}`, `GET /api/cpse-materials/{id}/similar` *(company-scoped; similarity is central-only)* |
+| Company upload | `POST /api/materials/upload/validate`, `POST /api/materials/upload/confirm`, `GET /api/materials/upload/history`, `GET /api/materials/upload/template` |
+| Demo import (admin only) | `POST /api/demo-import/validate`, `POST /api/demo-import/confirm`, `GET /api/demo-import/history`, `GET /api/demo-import/sample-csv` |
+| Synchronization | `GET/POST /api/synchronization`, `.../{id}/test-connection`, `.../{id}/sync`, `.../{id}/full-sync`, `.../{id}/sync-history` |
+| Harmonization | `GET /api/harmonization/*` (duplicates/near-duplicates/functional-equivalence/technical-conflicts), `POST /api/harmonization/scan` |
+| Common materials | `GET /api/common-materials`, `GET /api/common-materials/{code}` |
+| Duplicate codes | `GET /api/duplicate-codes`, `GET /api/duplicate-codes/{code}` |
+| Approvals | `GET /api/approvals`, `POST /api/approvals/{id}/approve`, `/reject`, `/edit-and-approve`, `/manual-review` |
+| Analytics | `GET /api/analytics/*`, `GET /api/procurement/*` |
+| Dashboard | `GET /api/dashboard/statistics`, `GET /api/dashboard/trends` *(central users only)* |
+| Audit | `GET /api/audit-logs` |
+| Notifications / Settings | `GET /api/notifications`, `GET/PUT /api/settings` |
+
+Full interactive schema: `http://localhost:8000/docs` (Swagger UI) once the backend
+is running.
+
+---
+
+## 21. Frontend Pages / Routes
+
+`/dashboard` · `/materials`, `/materials/cpse`, `/materials/{id}`, `/materials/{id}/analysis`
+· `/material-upload` (company self-service upload) · `/common-material-master`,
+`/common-material-master/{code}` · `/legacy-codes`, `/legacy-codes/{code}` ·
+`/harmonization/recommendations`, `/duplicates`, `/near-duplicates`,
+`/functional-equivalence`, `/technical-conflicts`, `/harmonization/pairs/{mappingId}`
+(side-by-side comparison + AI explanation + Approve/Reject) · `/cpse`, `/cpse/{id}` ·
+`/synchronization` (Data Synchronization) · `/demo-import` (Demo Data Import - DEMO
+ONLY, clearly labeled) · `/approvals/pending`, `/approved`, `/rejected`, `/approvals/{id}`
+· `/analytics`, `/analytics/procurement`, `/analytics/classification`, `/analytics/trends`
+· `/audit-log` · `/governance/rules` · `/notifications` · `/settings` · `/login`.
+
+---
+
+## 22. Terminology
 
 CPSE Material · Common Material · Common National Material Code · Common Material
 Master · Material Harmonization · Duplicate Material · Near-Duplicate Material ·

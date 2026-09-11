@@ -21,6 +21,7 @@ import Login from "@/pages/Login";
 import MaterialAnalysis from "@/pages/MaterialAnalysis";
 import MaterialDetail from "@/pages/MaterialDetail";
 import Materials from "@/pages/Materials";
+import MaterialUpload from "@/pages/MaterialUpload";
 import NotFound from "@/pages/NotFound";
 import Notifications from "@/pages/Notifications";
 import ProcurementAnalytics from "@/pages/ProcurementAnalytics";
@@ -46,6 +47,7 @@ export default function App() {
         {/* Material Master */}
         <Route path="/materials" element={<Materials />} />
         <Route path="/materials/cpse" element={<Materials />} />
+        <Route path="/material-upload" element={<MaterialUpload />} />
         <Route path="/materials/:id" element={<MaterialDetail />} />
         <Route path="/materials/:id/analysis" element={<MaterialAnalysis />} />
         <Route path="/common-material-master" element={<CommonMaterialMaster />} />

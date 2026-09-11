@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user
+from app.api.deps import assert_cpse_access, get_current_user, scoped_cpse_id
 from app.db.session import get_db
 from app.models.enums import MappingDecisionStatus
 from app.models.material import CPSEMaterial, MaterialAttribute, MaterialEmbedding
@@ -42,31 +42,31 @@ def search_materials(
     """
     from app.ai.text_embeddings import generate_text_embedding
 
+    scope = scoped_cpse_id(current_user, None)
+
     like = f"%{q.strip()}%"
-    lexical_matches = (
-        db.query(CPSEMaterial)
-        .filter(
-            or_(
-                CPSEMaterial.original_material_code.ilike(like),
-                CPSEMaterial.original_description.ilike(like),
-                CPSEMaterial.technical_specification.ilike(like),
-                CPSEMaterial.classification.ilike(like),
-                CPSEMaterial.uom.ilike(like),
-            )
+    lexical_query = db.query(CPSEMaterial).filter(
+        or_(
+            CPSEMaterial.original_material_code.ilike(like),
+            CPSEMaterial.original_description.ilike(like),
+            CPSEMaterial.technical_specification.ilike(like),
+            CPSEMaterial.classification.ilike(like),
+            CPSEMaterial.uom.ilike(like),
         )
-        .limit(50)
-        .all()
     )
+    if scope is not None:
+        lexical_query = lexical_query.filter(CPSEMaterial.cpse_id == scope)
+    lexical_matches = lexical_query.limit(50).all()
 
     query_vector, _ = generate_text_embedding(normalization.normalize_description(q))
-    semantic_matches = (
+    semantic_query = (
         db.query(CPSEMaterial)
         .join(MaterialEmbedding, MaterialEmbedding.material_id == CPSEMaterial.id)
         .filter(MaterialEmbedding.text_embedding.isnot(None))
-        .order_by(MaterialEmbedding.text_embedding.cosine_distance(query_vector))
-        .limit(20)
-        .all()
     )
+    if scope is not None:
+        semantic_query = semantic_query.filter(CPSEMaterial.cpse_id == scope)
+    semantic_matches = semantic_query.order_by(MaterialEmbedding.text_embedding.cosine_distance(query_vector)).limit(20).all()
 
     combined: dict[uuid.UUID, CPSEMaterial] = {m.id: m for m in [*lexical_matches, *semantic_matches]}
     return list(combined.values())[:30]
@@ -86,8 +86,9 @@ def list_materials(
 ):
     query = db.query(CPSEMaterial)
 
-    if cpse_id:
-        query = query.filter(CPSEMaterial.cpse_id == cpse_id)
+    scope = scoped_cpse_id(current_user, cpse_id)
+    if scope:
+        query = query.filter(CPSEMaterial.cpse_id == scope)
     if classification:
         query = query.filter(CPSEMaterial.classification.ilike(f"%{classification}%"))
     if status_filter:
@@ -115,6 +116,7 @@ def get_material(material_id: uuid.UUID, db: Session = Depends(get_db), current_
     material = db.query(CPSEMaterial).filter(CPSEMaterial.id == material_id).first()
     if not material:
         raise HTTPException(status_code=404, detail="CPSE material not found")
+    assert_cpse_access(current_user, material.cpse_id)
     return _material_to_detail(db, material)
 
 
@@ -126,6 +128,13 @@ def similar_materials(
     current_user: User = Depends(get_current_user),
 ):
     from app.ai.similarity import find_candidate_materials
+
+    if current_user.cpse_id is not None:
+        # Cross-company similarity is exactly what a company-scoped user
+        # must not see - it would leak another CPSE's material data through
+        # the "candidates" list. Cross-company comparison is the central
+        # approval workflow's job (see app.api.endpoints.harmonization).
+        raise HTTPException(status_code=403, detail="Cross-company similarity search is only available to central/admin users.")
 
     material = db.query(CPSEMaterial).filter(CPSEMaterial.id == material_id).first()
     if not material:

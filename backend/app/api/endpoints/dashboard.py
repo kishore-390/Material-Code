@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -26,8 +26,19 @@ _PENDING_STATUSES = (
 )
 
 
+def _require_central_user(current_user: User) -> None:
+    """This dashboard aggregates across every CPSE - a company-scoped user
+    seeing it would leak other companies' material counts/mappings, which
+    "each company can only access its own material database" forbids. A
+    company user's own numbers remain visible via the already-scoped
+    /api/cpse/{their_own_id} and /api/cpse-materials endpoints."""
+    if current_user.cpse_id is not None:
+        raise HTTPException(status_code=403, detail="Cross-company dashboard analytics are only available to central/admin users.")
+
+
 @router.get("/statistics", response_model=DashboardStatistics)
 def get_statistics(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    _require_central_user(current_user)
     cpses_connected = db.query(func.count(CPSE.id)).filter(CPSE.is_active.is_(True)).scalar() or 0
     total_materials = db.query(func.count(CPSEMaterial.id)).scalar() or 0
     common_material_codes = db.query(func.count(CommonMaterial.id)).scalar() or 0
@@ -94,6 +105,7 @@ def get_statistics(db: Session = Depends(get_db), current_user: User = Depends(g
 
 @router.get("/trends", response_model=DashboardTrends)
 def get_trends(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    _require_central_user(current_user)
     materials_by_cpse_rows = (
         db.query(CPSE.code, func.count(CPSEMaterial.id))
         .join(CPSEMaterial, CPSEMaterial.cpse_id == CPSE.id)

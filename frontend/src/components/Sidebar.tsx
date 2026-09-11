@@ -21,6 +21,7 @@ import {
   Sparkles,
   Tags,
   TrendingUp,
+  Upload,
   Wallet,
   XCircle,
 } from "lucide-react";
@@ -56,6 +57,7 @@ const NAV_GROUPS: NavGroup[] = [
       { to: "/common-material-master", label: "Common Materials", icon: Layers },
       { to: "/materials/cpse", label: "CPSE Materials", icon: Database },
       { to: "/legacy-codes", label: "Legacy Codes", icon: FileClock },
+      { to: "/material-upload", label: "Upload Materials", icon: Upload, roles: ["ADMIN", "MATERIAL_EXPERT", "REVIEWER"] },
     ],
   },
   {

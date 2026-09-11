@@ -1,28 +1,36 @@
 """
-DEMO-ONLY CSV import (SIH26099 demonstration mechanism).
+Shared material-file import core.
 
-This is NOT a production ingestion path. Production CPSE material data only
-ever arrives through app.connectors.sync_engine (secure read-only database
-connectors, spec section 2A-2D). This module exists purely so a live
-demonstration can populate the National Material Master with realistic rows
-without a real CPSE database to connect to - every row it creates is marked
-CPSEMaterial.is_demo_data = True and is fed through the EXACT SAME canonical
-ingestion pipeline a real sync uses:
+Two features build on this module:
+  - app.api.endpoints.demo_import: DEMO ONLY, admin-restricted, any
+    onboarded CPSE, rows marked is_demo_data=True.
+  - app.api.endpoints.material_upload: a CPSE company's own REAL production
+    self-service upload, restricted to exactly that company's own CPSE,
+    rows marked is_demo_data=False.
 
-    CSV row -> CanonicalMaterialRecord -> app.services.material_ingestion
+Both parse a CSV or Excel (.xlsx) file into CanonicalMaterialRecord rows and
+feed them through the EXACT SAME canonical ingestion pipeline every other
+path (including the secure read-only database connectors) uses:
+
+    file row -> CanonicalMaterialRecord -> app.services.material_ingestion
     (the same upsert core app.connectors.sync_engine uses) -> Celery
     ai_analysis -> app.connectors.sync_engine.trigger_batch_settlement
 
-There is no separate CSV-specific AI pipeline, scoring, decision engine, or
-common-code generator anywhere in this file - all of that continues to live
-exclusively in app.ai / app.services.decision_engine / code_generator,
-unchanged.
+There is no separate file-upload-specific AI pipeline, scoring, decision
+engine, or common-code generator anywhere in this module - all of that
+continues to live exclusively in app.ai / app.services.decision_engine /
+code_generator, unchanged. The two callers differ only in:
+  - is_demo_data: governs provenance AND the "a real production material can
+    never be silently overwritten by demo data" guard below (the reverse -
+    a company's own real re-upload updating its own prior real data - is a
+    normal, allowed update, exactly like a database connector re-sync).
+  - allowed_cpse_ids: which CPSE(s) a given upload may target.
 
-Security note: CSV column NAMES are never used to build SQL - csv.DictReader
-maps them generically and every field this module reads is addressed by a
-fixed, hardcoded key (see REQUIRED_COLUMNS), never interpolated into a
-query. The only database write path is app.services.material_ingestion,
-which uses the SQLAlchemy ORM exclusively.
+Security note: file column NAMES are never used to build SQL - parsing maps
+them generically and every field this module reads is addressed by a fixed,
+hardcoded key (see REQUIRED_COLUMNS), never interpolated into a query. The
+only database write path is app.services.material_ingestion, which uses the
+SQLAlchemy ORM exclusively.
 """
 import csv
 import io
@@ -57,7 +65,7 @@ REQUIRED_COLUMNS = (
 _REQUIRED_NON_EMPTY = ("cpse_code", "original_material_code", "original_description", "material_type", "uom")
 _VALID_CRITICALITY = {c.value for c in Criticality}
 
-MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024  # 5 MB - a demo CSV, not a bulk data feed
+MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024  # 5 MB - a material master file, not a bulk data lake dump
 MAX_ROWS = 5000
 PREVIEW_ROWS = 20
 
@@ -106,6 +114,53 @@ def _decode(raw_bytes: bytes) -> str:
         return raw_bytes.decode("utf-8-sig")
     except UnicodeDecodeError as exc:
         raise CsvImportError("File is not valid UTF-8 text. Please export the CSV as UTF-8.") from exc
+
+
+def _parse_csv_rows(raw_bytes: bytes) -> tuple[list[str], list[dict]]:
+    text = _decode(raw_bytes)
+    reader = csv.DictReader(io.StringIO(text))
+    fieldnames = [f.strip() for f in (reader.fieldnames or [])]
+    return fieldnames, list(reader)
+
+
+def _parse_xlsx_rows(raw_bytes: bytes) -> tuple[list[str], list[dict]]:
+    try:
+        from openpyxl import load_workbook
+    except ImportError as exc:  # pragma: no cover - dependency always installed, defensive only
+        raise CsvImportError("Excel (.xlsx) support is not available on this server.") from exc
+
+    try:
+        workbook = load_workbook(io.BytesIO(raw_bytes), read_only=True, data_only=True)
+    except Exception as exc:  # noqa: BLE001 - any corrupt/unsupported file becomes a clean 422, not a 500
+        raise CsvImportError(f"Could not read Excel file: {exc}") from exc
+
+    sheet = workbook.active
+    rows_iter = sheet.iter_rows(values_only=True)
+    header = next(rows_iter, None)
+    if header is None:
+        raise CsvImportError("Excel file is empty.")
+    fieldnames = [str(cell).strip() if cell is not None else "" for cell in header]
+
+    dict_rows: list[dict] = []
+    for row in rows_iter:
+        if row is None or all(cell is None for cell in row):
+            continue  # skip fully blank rows (common at the end of an exported sheet)
+        dict_rows.append(
+            {
+                fieldnames[i]: ("" if row[i] is None else str(row[i]).strip())
+                for i in range(len(fieldnames))
+                if i < len(row)
+            }
+        )
+    workbook.close()
+    return fieldnames, dict_rows
+
+
+def _parse_rows(filename: str, raw_bytes: bytes) -> tuple[list[str], list[dict]]:
+    extension = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    if extension in ("xlsx", "xlsm"):
+        return _parse_xlsx_rows(raw_bytes)
+    return _parse_csv_rows(raw_bytes)
 
 
 def _parse_criticality(value: str) -> tuple[str | None, str | None]:
@@ -211,34 +266,61 @@ def build_sample_csv() -> str:
     return buffer.getvalue()
 
 
-def validate_csv(db: Session, *, filename: str, raw_bytes: bytes) -> CsvValidationResult:
+def build_upload_template_csv() -> str:
+    """A blank column-header template (plus one illustrative example row) for
+    app.api.endpoints.material_upload - a CPSE's own material-master export,
+    unlike build_sample_csv above which is pre-filled with the specific demo
+    fixture pairs used by the DEMO ONLY admin import."""
+    example = dict(
+        cpse_code="IOCL", original_material_code="MAT-000001", original_description="Carbon Steel Pipe 100mm ASTM A106",
+        material_type="Pipe", material_grade="A106", dimensions="100mm", technical_specification="Seamless carbon steel pipe",
+        uom="METER", manufacturer="", standard="ASTM A106", function="Fluid Transfer", classification="Pipe",
+        packaging="", criticality="NORMAL", quantity="",
+    )
+    buffer = io.StringIO()
+    writer = csv.DictWriter(buffer, fieldnames=REQUIRED_COLUMNS)
+    writer.writeheader()
+    writer.writerow(example)
+    return buffer.getvalue()
+
+
+def validate_material_file(
+    db: Session,
+    *,
+    filename: str,
+    raw_bytes: bytes,
+    is_demo_data: bool,
+    allowed_cpse_ids: set[uuid.UUID] | None = None,
+) -> CsvValidationResult:
     """
     Full structural + data + cross-reference validation, with NOTHING
     inserted into the database - this is the "show errors/preview before
     import" step. Returns every row's outcome so the frontend can render
     valid/invalid counts and a preview without a second round trip.
+
+    `allowed_cpse_ids`, when given, restricts which CPSE(s) this file may
+    target (a company upload passes exactly the uploader's own CPSE id;
+    the admin demo import passes None to allow any onboarded CPSE).
     """
     if len(raw_bytes) > MAX_FILE_SIZE_BYTES:
-        raise CsvImportError(f"File exceeds the {MAX_FILE_SIZE_BYTES // (1024 * 1024)} MB demo import limit.")
+        raise CsvImportError(f"File exceeds the {MAX_FILE_SIZE_BYTES // (1024 * 1024)} MB import limit.")
     if not raw_bytes.strip():
         raise CsvImportError("File is empty.")
 
-    text = _decode(raw_bytes)
-    reader = csv.DictReader(io.StringIO(text))
-    fieldnames = [f.strip() for f in (reader.fieldnames or [])]
+    fieldnames, raw_rows = _parse_rows(filename, raw_bytes)
     missing = [c for c in REQUIRED_COLUMNS if c not in fieldnames]
     if missing:
-        raise CsvImportError(f"CSV is missing required column(s): {', '.join(missing)}")
+        raise CsvImportError(f"File is missing required column(s): {', '.join(missing)}")
+    if len(raw_rows) > MAX_ROWS:
+        raise CsvImportError(f"File has more than {MAX_ROWS} data rows - split it into smaller files.")
 
     cpse_by_code = {c.code.upper(): c for c in db.query(CPSE).all()}
 
     rows: list[RowResult] = []
     seen_keys: dict[tuple[str, str], list[int]] = {}
 
-    for line_number, raw_row in enumerate(reader, start=2):
-        if line_number - 1 > MAX_ROWS:
-            raise CsvImportError(f"CSV has more than {MAX_ROWS} data rows - split it into smaller demo files.")
-
+    for index, raw_row in enumerate(raw_rows):
+        line_number = index + 2  # header is row 1, in both CSV and Excel
         data = {k: (v.strip() if isinstance(v, str) else v) for k, v in raw_row.items() if k in REQUIRED_COLUMNS}
         result = RowResult(row_number=line_number, raw=data)
 
@@ -250,9 +332,15 @@ def validate_csv(db: Session, *, filename: str, raw_bytes: bytes) -> CsvValidati
         cpse = cpse_by_code.get(cpse_code)
         if data.get("cpse_code") and cpse is None:
             result.errors.append(
-                f"Unknown CPSE code '{data['cpse_code']}' - the demo CSV import can only target CPSEs already "
+                f"Unknown CPSE code '{data['cpse_code']}' - this import can only target CPSEs already "
                 "onboarded under Participating CPSEs, never create new ones."
             )
+        elif cpse is not None and allowed_cpse_ids is not None and cpse.id not in allowed_cpse_ids:
+            result.errors.append(
+                f"You are not authorized to upload materials for CPSE '{cpse_code}' - "
+                "you can only upload materials for your own company."
+            )
+            cpse = None
 
         criticality, crit_err = _parse_criticality(data.get("criticality", ""))
         if crit_err:
@@ -267,10 +355,10 @@ def validate_csv(db: Session, *, filename: str, raw_bytes: bytes) -> CsvValidati
             seen_keys.setdefault(key, []).append(line_number)
 
             existing = material_ingestion.find_existing(db, cpse_id=cpse.id, original_material_code=material_code)
-            if existing is not None and not existing.is_demo_data:
+            if existing is not None and is_demo_data and not existing.is_demo_data:
                 result.errors.append(
                     f"Material code '{material_code}' at {cpse_code} already exists as real production data "
-                    "synced from a database connector - the demo CSV import cannot overwrite it."
+                    "synced from a database connector - a demo import cannot overwrite it."
                 )
 
         if cpse is not None and not result.errors:
@@ -299,7 +387,7 @@ def validate_csv(db: Session, *, filename: str, raw_bytes: bytes) -> CsvValidati
         if len(line_numbers) > 1:
             for row in rows:
                 if row.record is not None and (row.raw.get("cpse_code", "").upper(), row.raw.get("original_material_code", "")) == key:
-                    row.errors.append(f"Duplicate original_material_code within this CSV (also on row(s) {[n for n in line_numbers if n != row.row_number]})")
+                    row.errors.append(f"Duplicate original_material_code within this file (also on row(s) {[n for n in line_numbers if n != row.row_number]})")
                     row.record = None
                     row.cpse_id = None
 
@@ -337,16 +425,23 @@ def import_valid_rows(
     *,
     actor_id: uuid.UUID | None,
     actor_name: str,
+    is_demo_data: bool,
+    source_label: str,
+    batch_entity_type: str,
+    batch_action: str,
+    row_created_action: str = "MATERIAL_FILE_IMPORTED_CREATED",
+    row_updated_action: str = "MATERIAL_FILE_IMPORTED_UPDATED",
+    batch_details_extra: dict | None = None,
 ) -> ImportSummary:
     """
     Feeds every valid row through app.services.material_ingestion (the same
     upsert core app.connectors.sync_engine uses), then hands the whole batch
     to app.connectors.sync_engine.trigger_batch_settlement - the identical
     real completion-tracked settlement mechanism a live database sync uses,
-    never a fixed delay or a demo-only shortcut. `wait=True` is used (as
-    app.demo_seed already does for its own demo syncs) so this call's
-    response can immediately report each row's final governance outcome for
-    the frontend's result page, instead of leaving the caller to poll.
+    never a fixed delay or a shortcut. `wait=True` is used (as app.demo_seed
+    already does for its own demo syncs) so this call's response can
+    immediately report each row's final governance outcome for the
+    frontend's result page, instead of leaving the caller to poll.
     """
     from app.connectors.sync_engine import trigger_batch_settlement
     from app.models.harmonization import CommonMaterialMapping
@@ -367,10 +462,10 @@ def import_valid_rows(
                 record=row.record,
                 actor_name=actor_name,
                 actor_type="USER",
-                is_demo_data=True,
-                created_action="MATERIAL_CSV_IMPORTED_CREATED",
-                updated_action="MATERIAL_CSV_IMPORTED_UPDATED",
-                log_details_extra={"import_batch_id": str(batch_id), "source": "DEMO_CSV_IMPORT", "filename": validation.filename},
+                is_demo_data=is_demo_data,
+                created_action=row_created_action,
+                updated_action=row_updated_action,
+                log_details_extra={"import_batch_id": str(batch_id), "source": source_label, "filename": validation.filename},
             )
         except Exception as exc:  # noqa: BLE001 - one bad row must not fail the whole import
             db.rollback()
@@ -409,8 +504,8 @@ def import_valid_rows(
     invalid_count = len(validation.invalid_rows)
     log_action(
         db,
-        action="CSV_DEMO_IMPORT_COMPLETED",
-        entity_type="csv_import_batch",
+        action=batch_action,
+        entity_type=batch_entity_type,
         entity_id=batch_id,
         actor_id=actor_id,
         actor_name=actor_name,
@@ -421,6 +516,7 @@ def import_valid_rows(
             "valid_count": len(validation.valid_rows),
             "invalid_count": invalid_count,
             **counts,
+            **(batch_details_extra or {}),
         },
     )
 

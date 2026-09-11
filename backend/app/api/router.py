@@ -12,6 +12,7 @@ from app.api.endpoints import (
     demo_import,
     duplicate_codes,
     harmonization,
+    material_upload,
     materials,
     notifications,
     procurement,
@@ -22,6 +23,7 @@ from app.api.endpoints import (
 api_router = APIRouter(prefix="/api")
 api_router.include_router(auth.router)
 api_router.include_router(materials.router)
+api_router.include_router(material_upload.router)
 api_router.include_router(ai.router)
 api_router.include_router(harmonization.router)
 api_router.include_router(approvals.router)

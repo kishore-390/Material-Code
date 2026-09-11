@@ -68,7 +68,7 @@ async def validate_csv(
     and a row preview before the user confirms the import."""
     filename, raw_bytes = await _read_upload(file)
     try:
-        result = svc.validate_csv(db, filename=filename, raw_bytes=raw_bytes)
+        result = svc.validate_material_file(db, filename=filename, raw_bytes=raw_bytes, is_demo_data=True)
     except svc.CsvImportError as exc:
         return CsvValidationResponse(
             filename=filename, total_rows=0, valid_count=0, invalid_count=0,
@@ -101,7 +101,7 @@ async def confirm_import(
     """
     filename, raw_bytes = await _read_upload(file)
     try:
-        validation = svc.validate_csv(db, filename=filename, raw_bytes=raw_bytes)
+        validation = svc.validate_material_file(db, filename=filename, raw_bytes=raw_bytes, is_demo_data=True)
     except svc.CsvImportError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -115,7 +115,12 @@ async def confirm_import(
             },
         )
 
-    summary = svc.import_valid_rows(db, validation, actor_id=current_user.id, actor_name=current_user.full_name)
+    summary = svc.import_valid_rows(
+        db, validation, actor_id=current_user.id, actor_name=current_user.full_name,
+        is_demo_data=True, source_label="DEMO_CSV_IMPORT",
+        batch_entity_type="csv_import_batch", batch_action="CSV_DEMO_IMPORT_COMPLETED",
+        row_created_action="MATERIAL_CSV_IMPORTED_CREATED", row_updated_action="MATERIAL_CSV_IMPORTED_UPDATED",
+    )
 
     return CsvImportResponse(
         batch_id=summary.batch_id,
