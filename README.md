@@ -1,89 +1,86 @@
 # ONE NATION → ONE COMMON MATERIAL CODE
 
-**AI-Powered CPSE Material Harmonization Platform**
-
-A real, working full-stack prototype that harmonizes material codes used by
-different Central Public Sector Enterprises (CPSEs). When two CPSEs describe
-the same physical item differently (e.g. `IOCL-PIP-1023` "Carbon Steel
-Seamless Pipe" vs `ONGC-4481` "Seamless Carbon Steel Pipe"), the platform's AI
-pipeline detects the equivalence, scores it explainably, and — depending on
-confidence — either auto-generates a Common Material Code, routes it to a
-Material Expert for approval, or declines to harmonize it.
+**AI-Powered National Unified Material Master Platform** (SIH26099)
 
 ---
 
-## 1. Objective
+## 1. Objective / Problem Statement
 
-Different CPSEs maintain independent material masters with inconsistent
-codes, descriptions, specifications and units for identical or near-identical
-items. This causes duplicate purchasing, inconsistent inventory data, and
-lost procurement leverage. This platform:
+Central Public Sector Enterprises (CPSEs) across Oil & Gas, Power, Steel, Mining and
+Heavy Engineering procure and maintain materials that are frequently identical or
+functionally equivalent, but are recorded under different codes, descriptions,
+specifications and units of measure in each CPSE's own material master. This causes
+duplicate purchasing, inconsistent inventory data, and lost opportunities for
+collaborative procurement.
 
-1. Ingests material data (manual entry, CSV/Excel bulk upload, images) from
-   any CPSE.
-2. Normalizes descriptions, specifications, categories and units of measure.
-3. Generates text + image embeddings and runs a **pgvector** similarity
-   search to retrieve plausible duplicate candidates — never a full
-   table scan.
-4. Computes an **explainable, weighted similarity score** across six
-   components (description, specification, category, UOM, image, attributes).
-5. Applies a **deterministic decision engine** (≥95% auto-harmonize,
-   85–95% human review, 60–85% low confidence, <60% no common code).
-6. Keeps AI **recommendation**, human **approval**, and Common Material
-   **Master updates** as three strictly separated steps, all captured in an
-   immutable audit log.
+This platform automatically ingests each participating CPSE's material data through
+secure, read-only database connectors, harmonizes it with an AI/NLP pipeline (SBERT →
+pgvector → weighted scoring → technical-conflict detection → XGBoost ranking →
+decision engine), and maintains a neutral **Common National Material Code** for every
+harmonized material group — while permanently preserving traceability back to each
+CPSE's own original material code.
+
+**The CPSE always remains the owner of its original material master.** The platform
+never overwrites a CPSE's own code or description; it only builds a centralized,
+harmonized *national view* on top of automatically-synchronized copies of that data.
 
 ---
 
 ## 2. Architecture
 
 ```
-React + TS Frontend (Vite)
-        |  REST (Axios / React Query)
+CPSE source databases (Postgres / MySQL / Oracle / SQL Server)
+        |  secure, read-only connector (app.connectors)
         v
-FastAPI Backend  ────────────┬───────────────┐
-        |                    |               |
-        v                    v               v
-PostgreSQL + pgvector      Redis        Celery Workers
-        |                                    |
-        v                                    v
-Material Database                    AI Processing Pipeline
-        |                              (text + image embeddings,
-        v                               pgvector search, scoring)
-   Decision Engine
-   >=95%        85-94.99%        <85%
-   Auto      Human Review     Low Confidence / Reject
-   Harmonize     Required
+Automatic ingestion (full + incremental sync, app.connectors.sync_engine)
         |
         v
-Common Material Code Generator (DB sequence, transaction-safe)
+Central material database (cpse_materials) ── validation, cleaning, normalization,
+        |                                       attribute extraction
+        v
+AI harmonization pipeline (app.ai.analyzer)
+    normalize -> SBERT embedding -> pgvector candidate retrieval ->
+    weighted scoring (description/spec/classification/grade/dimension/
+    standard/UOM/manufacturer/function/criticality) -> technical conflict
+    detection -> XGBoost blend (if trained) -> decision engine
         |
         v
-Common Material Master + Audit Log + Notifications
+Decision: IDENTICAL / DUPLICATE / NEAR_DUPLICATE / FUNCTIONALLY_EQUIVALENT /
+          NOT_EQUIVALENT / TECHNICAL_CONFLICT / MANUAL_REVIEW
+        |
+        v
+common_material_mappings (AI recommendation) ──> Governance / Approval workflow
+        |                                              (Material Expert / Admin)
+        v                                              |
+common_materials (Common National Material Code) <─────┘
+        |
+        v
+Procurement analytics (demand aggregation) + Audit trail (every step)
 ```
 
-See `backend/app/ai/analyzer.py` for the pipeline orchestrator and
-`backend/app/services/decision_engine.py` / `scoring.py` for the rules.
+No step in this pipeline requires a human to manually type in a material record —
+material data only ever enters the system through a source connector sync. Humans
+**validate AI recommendations** (approve / reject / edit & approve / send to manual
+review); they never hand-create the material master.
 
 ---
 
 ## 3. Technology Stack
 
-**Frontend:** React 18, TypeScript, Vite, Tailwind CSS, shadcn/ui-style
-components (Radix primitives + class-variance-authority), React Router,
-TanStack React Query, Recharts, Axios, lucide-react.
+**Frontend:** React 18, TypeScript, Vite, Tailwind CSS, Radix UI primitives, React
+Router, TanStack React Query, Recharts, Axios.
 
-**Backend:** Python 3.12, FastAPI, SQLAlchemy 2.x, Pydantic v2, PostgreSQL,
-pgvector, Alembic, JWT auth (python-jose), Passlib/bcrypt, Celery, Redis.
+**Backend:** Python 3.12, FastAPI, SQLAlchemy 2.x, Pydantic v2, PostgreSQL + pgvector,
+Alembic, JWT auth, Celery, Redis.
 
-**AI/ML:** sentence-transformers (`all-MiniLM-L6-v2`) for text embeddings,
-CLIP (`openai/clip-vit-base-patch32`) for image embeddings, scikit-learn,
-Pillow — all with a deterministic, structurally-identical **mock fallback**
-(feature-hashing bag-of-words / pixel histogram) so the whole pipeline runs
-even with no internet access to download model weights. Swapping in the real
-models requires zero API changes.
+**AI/ML:** sentence-transformers (`all-MiniLM-L6-v2`) for text embeddings, pgvector
+for ANN candidate retrieval, XGBoost for match ranking — each with a deterministic,
+structurally-identical fallback so the pipeline runs even with no model weights
+available, and never silently fabricates a score.
 
-**Infrastructure:** Docker, Docker Compose.
+**Connectors:** SQLAlchemy-based read-only connectors — PostgreSQL and MySQL fully
+implemented; Oracle and SQL Server are interface-complete and activate once their
+optional vendor drivers (`oracledb`, `pyodbc`) are installed.
 
 ---
 
@@ -93,40 +90,193 @@ models requires zero API changes.
 material/
 ├── backend/
 │   ├── app/
-│   │   ├── main.py                FastAPI app, CORS, static /uploads mount
-│   │   ├── core/                  settings, security (JWT/bcrypt)
+│   │   ├── main.py                FastAPI app, CORS
+│   │   ├── core/                  settings, JWT/bcrypt security
 │   │   ├── db/                    session, declarative base, extension init
-│   │   ├── models/                SQLAlchemy models (15 tables)
+│   │   ├── models/                SQLAlchemy models (spec section 5 schema)
 │   │   ├── schemas/                Pydantic request/response models
-│   │   ├── api/endpoints/          auth, materials, ai, harmonization,
-│   │   │                           approvals, common_codes, cpse, dashboard,
-│   │   │                           audit, notifications, settings
+│   │   ├── connectors/             SourceConnector interface + Postgres/MySQL/
+│   │   │                           Oracle/SQL Server implementations + sync engine
+│   │   ├── api/endpoints/          auth, cpse-materials, common-materials,
+│   │   │                           harmonization, approvals, synchronization,
+│   │   │                           procurement, analytics, dashboard, audit,
+│   │   │                           notifications, settings
 │   │   ├── services/               normalization, scoring, decision_engine,
-│   │   │                           code_generator, harmonization_service,
-│   │   │                           bulk_import, file_storage, audit/notify
-│   │   ├── ai/                     text/image embeddings, similarity, analyzer
-│   │   ├── workers/                Celery app + tasks
-│   │   └── seed.py                 realistic seed data + demo scenarios
-│   ├── alembic/                    migrations (0001_initial creates all tables)
-│   ├── tests/                      pytest: scoring, decision engine, auth, API
+│   │   │                           code_generator, harmonization_service (governance),
+│   │   │                           duplicate_service, duplicate_code_service,
+│   │   │                           procurement_service, attribute_extraction
+│   │   ├── ai/                     text embeddings, similarity, conflict detector,
+│   │   │                           XGBoost ranker, analyzer (pipeline orchestrator)
+│   │   ├── workers/                Celery app + sync/AI-analysis tasks
+│   │   ├── seed.py                 roles + one ADMIN login - zero business data
+│   │   └── demo_seed.py            OPT-IN demo CPSEs + demo source tables + real sync
+│   ├── alembic/                    migrations (0001_initial creates the full schema)
+│   ├── tests/                      pytest suite (see section 13)
 │   └── Dockerfile
 ├── frontend/
 │   ├── src/
-│   │   ├── pages/                  one file per route (see section 9)
-│   │   ├── components/, components/ui/   shared UI + shadcn-style primitives
-│   │   ├── charts/                 Recharts wrappers
+│   │   ├── pages/                  one file per route (see section 8)
+│   │   ├── components/, components/ui/   shared UI + design-system primitives
 │   │   ├── services/                Axios API clients
-│   │   ├── auth/                    AuthContext, RequireAuth guard
 │   │   └── types/                   shared TypeScript types
 │   └── Dockerfile
-├── uploads/                        bind-mounted file storage (materials/documents/images)
 ├── docker-compose.yml
 └── .env.example
 ```
 
 ---
 
-## 5. Running with Docker
+## 5. Data Ingestion & the Database Connector Architecture
+
+There is **no manual material entry and no CSV/Excel upload** anywhere in this
+platform. Every CPSE material arrives through a `source_connections` row (spec
+section 5.6) — a secure, read-only database connector configuration:
+
+- `database_type`: `POSTGRESQL` | `MYSQL` | `ORACLE` | `SQLSERVER`
+- `host` / `port` / `database_name` / `table_name`
+- `username_reference` / `secret_reference`: the **names** of environment variables
+  holding the read-only credentials — never the credentials themselves. They are
+  never stored in the database and never returned by any API response.
+- `column_mapping`: how that CPSE's own source columns map onto the canonical
+  material record (`app.connectors.base.CanonicalMaterialRecord`) — since every
+  CPSE's schema is unknown in advance, this is what makes the connector
+  architecture extensible without a code change per CPSE.
+- `cursor_column`: the source column used for incremental sync.
+
+`app.connectors.sync_engine` does FETCH → VALIDATE → NORMALIZE → ATTRIBUTE EXTRACTION
+→ idempotent UPSERT (keyed on `cpse_id` + `original_material_code`) → triggers the
+existing AI pipeline only for created/changed records. The incremental cursor only
+advances after a batch succeeds with zero failures; a human-**APPROVED** mapping is
+never silently reassigned by a later sync (see `app.ai.analyzer._handle_decision`).
+
+Adding a new CPSE that uses an already-supported database type requires **no code
+change** — only a new `source_connections` row plus the credential environment
+variables it names.
+
+---
+
+## 6. Automatic Synchronization
+
+Celery Beat ticks every `SOURCE_SYNC_BEAT_TICK_SECONDS` and checks each enabled
+`source_connections` row's own `sync_interval_seconds`; whichever are due get an
+incremental sync enqueued (`app.workers.tasks.check_due_source_syncs`). Full and
+incremental syncs share the same `_run_sync` implementation and are also triggerable
+on demand via `POST /api/synchronization/{id}/sync` (incremental) or
+`/full-sync`.
+
+---
+
+## 7. Data Normalization
+
+`app/services/normalization.py` uppercases, collapses whitespace, expands technical
+abbreviations (`SS` → `STAINLESS STEEL`), and canonicalizes dimension notation (`4"`,
+`4 inch`, `DN100` → one token) — while the *original* CPSE values are always preserved
+alongside the normalized ones used for comparison.
+
+`app/services/attribute_extraction.py` backfills `material_grade` / `dimensions` /
+`standard` from free text (reusing the same regex vocabulary as the conflict
+detector, see `app/ai/attribute_patterns.py`) only when a CPSE's source table didn't
+supply them as separate columns — it never overwrites a value the source explicitly
+provided.
+
+---
+
+## 8. AI Pipeline
+
+1. **SBERT** (`app/ai/text_embeddings.py`) — real sentence-transformers model with a
+   deterministic hashing-based fallback of identical dimensionality.
+2. **pgvector** (`app/ai/similarity.py`) — the primary candidate-retrieval layer:
+   cosine-distance ANN search pre-filtered by normalized classification. There is no
+   FAISS anywhere in this codebase.
+3. **Weighted scoring** (`app/services/scoring.py`) — eleven independently
+   inspectable 0–100 component scores (description, specification, classification,
+   UOM, attributes, grade, dimension, standard, manufacturer, function, criticality).
+   Packaging/pack size is *never* a scoring component, and a packaging-only UOM
+   difference (e.g. `PC` vs `BOX`) is never treated as a conflict.
+4. **Technical conflict detection** (`app/ai/conflict_detector.py`) — a genuine
+   grade/dimension/thread/voltage/pressure mismatch always overrides similarity,
+   however high.
+5. **XGBoost** (`app/ai/ml_ranker.py`) — blends its prediction into the final score
+   only when a trained model exists AND the rule-based classification score clears a
+   safety floor; otherwise the pure rule-based score decides. No trained model ships
+   in this repo by default — see `app/ml/train_xgb_ranker.py`.
+6. **Decision engine** (`app/services/decision_engine.py`) — turns the score +
+   conflict signal into one of `IDENTICAL / DUPLICATE / NEAR_DUPLICATE /
+   FUNCTIONALLY_EQUIVALENT / NOT_EQUIVALENT / TECHNICAL_CONFLICT / MANUAL_REVIEW`.
+
+`app/ai/analyzer.py` orchestrates all of the above and is the **only** place that
+creates or updates a `common_material_mappings` row — AI never writes `APPROVED`
+directly; a mapping always starts as `AI_RECOMMENDED` / `PENDING_VALIDATION` /
+`MANUAL_REVIEW` / `TECHNICAL_CONFLICT` (spec section 9/10/14).
+
+---
+
+## 9. Common National Material Code & CPSE Mapping
+
+`app/services/code_generator.py` issues neutral `CM-XXXXXX` codes from a Postgres
+sequence (`nextval()` is atomic, so concurrent workers never collide). A
+`common_material_mappings` row links one `cpse_materials` row to one
+`common_materials` row with a `mapping_type` (IDENTICAL/DUPLICATE/NEAR_DUPLICATE/
+FUNCTIONALLY_EQUIVALENT/MANUAL_MAPPING/LEGACY_MAPPING) and a `decision_status`
+governing whether it is official yet. Re-analyzing the same pair updates the
+existing mapping rather than creating a duplicate (idempotency, spec section 29).
+
+---
+
+## 10. Legacy Code Rationalization
+
+`GET /api/legacy-codes` groups `cpse_materials` by identical `original_material_code`
+across two or more CPSEs — a deliberately separate concept from AI-detected material
+*equivalence*. Each pair is classified as `AI_TECHNICAL_EQUIVALENCE` (already linked
+to the same common material), `TECHNICAL_CONFLICT` (a real mismatch despite sharing a
+code), or `SAME_SOURCE_CODE` (no relationship established yet).
+
+---
+
+## 11. Approval / Governance Workflow
+
+`app/services/harmonization_service.py` is the **only** place that moves a mapping to
+an official state — `approve_mapping`, `reject_mapping`, `edit_and_approve_mapping`,
+`send_to_manual_review`, `request_more_info` — each paired with an audit log entry
+and an `approval_actions` row in the same transaction. Frontend: **Approvals** →
+Pending Validation / Approved / Rejected.
+
+---
+
+## 12. Procurement Analytics
+
+`procurement_history` rows (flagged `is_demo_data` when seeded by `app.demo_seed`)
+feed `app/services/procurement_service.py`, which aggregates demand per Common
+Material Code across CPSEs into a **potential collaborative procurement opportunity**
+— always phrased as an estimate, never a realized savings claim.
+
+---
+
+## 13. Audit & Governance
+
+Every AI decision and human action is written to `audit_logs` with `before_state` /
+`after_state` / `reason` / `ai_model_version` / `confidence` in addition to a
+free-form `details` blob — see `app/services/audit_service.py`.
+
+---
+
+## 14. Security
+
+- Database credentials never touch the frontend or an API response — connectors
+  resolve them only from environment variables named by `username_reference` /
+  `secret_reference` (`app/connectors/registry.py`).
+- Every connector is read-only by construction — the `SourceConnector` interface has
+  no write method at all, and the Postgres/MySQL connectors additionally set a
+  session-level read-only pragma as defense in depth.
+- Table/column identifiers from `column_mapping`/`table_name` are validated against
+  a strict allowlist regex before being interpolated into SQL (`app.connectors.base.
+  validate_identifier`) — closing the SQL-injection surface outright.
+- Roles: `ADMIN`, `MATERIAL_EXPERT`, `REVIEWER`, `VIEWER` (spec section 31).
+- JWT auth (`python-jose`), bcrypt password hashing.
+
+---
+
+## 15. Running with Docker
 
 ```bash
 cp .env.example .env        # edit secrets/passwords for anything beyond local demo use
@@ -137,254 +287,87 @@ docker compose exec backend python -m app.seed
 ```
 
 - Frontend: http://localhost:5174
-- Backend API root: http://localhost:8000
-- Swagger UI: http://localhost:8000/docs
-- ReDoc: http://localhost:8000/redoc
-- PostgreSQL (for pgAdmin/psql from your host machine): `localhost:5544`
-- pgAdmin (optional, containerized): `docker compose --profile tools up -d pgadmin` → http://localhost:5050
+- Backend API root / Swagger UI: http://localhost:8000 / http://localhost:8000/docs
+- PostgreSQL (host access): `localhost:5544`
 
-> Ports 5173, 5432 and 5433 are commonly already in use by other local
-> projects, so this stack maps its frontend to **5174** and Postgres to
-> **5544** on the host. These are only host-side port numbers — containers
-> always talk to each other over the internal Docker network
-> (`postgres:5432`), so this never needs to match `DATABASE_URL`.
+After `python -m app.seed`, the central database is empty (zero CPSEs, materials,
+common materials, mappings) except the four roles and one `admin` login — exactly as
+spec section 43 requires. Log in as `admin` / `Admin@123` and change the password.
 
-### Viewing the database in a desktop pgAdmin / DBeaver / psql
-
-If you already have pgAdmin installed natively (not the containerized one
-above), register a **new server** connection — don't reuse an existing one,
-it's almost certainly pointing at a different local Postgres instance:
-
-| Field | Value |
-|---|---|
-| Host | `localhost` |
-| Port | `5544` |
-| Maintenance database | `material_harmonization` |
-| Username | `material_admin` |
-| Password | value of `POSTGRES_PASSWORD` in your `.env` |
-
-Other useful commands:
+### Demo data (opt-in, clearly separate from production data)
 
 ```bash
-docker compose logs -f backend worker
-docker compose down                 # stop everything
-docker compose down -v              # also wipe the Postgres volume
+docker compose exec backend python -m app.demo_seed
 ```
 
-> The backend container runs `alembic upgrade head` automatically on
-> startup, and creates the `vector` / `uuid-ossp` Postgres extensions on
-> first boot — no manual DB setup required beyond the seed command above.
+Creates a handful of demo CPSEs, a plainly-named `demo_source_<cpse_code>` table per
+CPSE (standing in for "the CPSE's own external database" — in production this would
+be a genuinely separate database), registers real `source_connections` rows
+(`is_demo=true`) pointing at them, and runs a **real** full sync through the actual
+`PostgresConnector` + AI pipeline. Nothing here bypasses the real ingestion/AI code
+path — it only supplies the source data.
 
 ---
 
-## 6. Environment Variables
+## 16. Environment Variables
 
-See `.env.example` for the full list. Key ones:
-
-| Variable | Purpose |
-|---|---|
-| `DATABASE_URL` | SQLAlchemy connection string (Postgres) |
-| `REDIS_URL` / `CELERY_BROKER_URL` / `CELERY_RESULT_BACKEND` | Celery/Redis wiring |
-| `JWT_SECRET_KEY` | **Change this** before any non-local use |
-| `TEXT_EMBEDDING_MODEL` / `IMAGE_EMBEDDING_MODEL` | HuggingFace model ids |
-| `AI_USE_MOCK_FALLBACK` | If real models fail to load, fall back to the deterministic mock embedder instead of raising |
-| `THRESHOLD_AUTO` / `THRESHOLD_REVIEW` / `THRESHOLD_LOW` | Decision thresholds (also editable at runtime from Admin → Settings) |
-| `WEIGHT_DESCRIPTION` … `WEIGHT_ATTRIBUTES` | Scoring weights (must sum to 1.0) |
-
-Frontend credentials/URLs are never hardcoded in source — `VITE_API_URL` is
-injected at container start and read via `import.meta.env`.
+See `.env.example`. Each CPSE's read-only database credentials are set as a pair of
+environment variables named by that CPSE's own `source_connections.username_reference`
+/ `secret_reference` — never hardcoded, never a single global pair.
 
 ---
 
-## 7. Sample Login Credentials (from `app/seed.py`)
+## 17. Database Migration
 
-| Role | Username | Password |
-|---|---|---|
-| Admin | `admin` | `Admin@123` |
-| Material Expert | `raj.kumar` | `Expert@123` |
-| Material Expert | `priya.sharma` | `Expert@123` |
-| CPSE User (IOCL) | `iocl.user` | `Cpse@123` |
-| CPSE User (ONGC) | `ongc.user` | `Cpse@123` |
-| CPSE User (BPCL) | `bpcl.user` | `Cpse@123` |
-| CPSE User (HPCL) | `hpcl.user` | `Cpse@123` |
-| CPSE User (SAIL) | `sail.user` | `Cpse@123` |
-| Viewer | `viewer` | `Viewer@123` |
+```bash
+docker compose exec backend alembic upgrade head
+```
+
+`alembic/versions/0001_initial.py` creates the entire schema from a clean database.
 
 ---
 
-## 8. How Material Upload Works
+## 18. Running Backend / Frontend / Workers Individually
 
-`/materials/upload` supports:
+```bash
+# Backend
+cd backend && uvicorn app.main:app --reload
 
-- **Single upload** — a form (material code, description, specification,
-  category, UOM, CPSE, manufacturer, brand, material type, free-form
-  attributes, image) posted as `multipart/form-data` to `POST /api/materials`.
-- **Bulk upload** — CSV/Excel with columns `material_code, description,
-  specification, category, uom, cpse, manufacturer, brand, material_type,
-  image`. The flow is: upload → `POST /api/materials/bulk/validate` (returns
-  a per-row validation report: missing description, invalid/missing UOM,
-  duplicate material code, unknown CPSE) → review in the browser → confirm →
-  `POST /api/materials/bulk/import`, which imports only the valid rows and
-  queues each one for AI analysis via Celery.
+# Celery worker (AI analysis + syncs)
+cd backend && celery -A app.workers.celery_app worker --loglevel=info
 
-Every created material is automatically queued for AI analysis
-(`app.workers.tasks.ai_analysis`) so uploads never block on embedding
-generation, even for large batches.
+# Celery beat (scheduled incremental syncs)
+cd backend && celery -A app.workers.celery_app beat --loglevel=info
+
+# Frontend
+cd frontend && npm install && npm run dev
+```
 
 ---
 
-## 9. How AI Matching Works
-
-1. **Normalize** (`app/services/normalization.py`): uppercase, punctuation,
-   unit vocabulary (`M`/`Metre`/`Meter` → `METER`), technical abbreviations
-   (`CS` → `CARBON STEEL`), and dimension formats (`4"`, `4 inch`, `DN100`
-   all collapse to a single `4IN` token) — while the *original* values are
-   always preserved alongside the normalized ones.
-2. **Embed** (`app/ai/text_embeddings.py`, `image_embeddings.py`): a text
-   embedding from the normalized description/specification/category, and an
-   image embedding if a photo was provided. Stored in `pgvector` columns.
-3. **Retrieve candidates** (`app/ai/similarity.py`): pgvector cosine-distance
-   ANN search, pre-filtered by normalized category, capped to a handful of
-   candidates — the platform never does an O(n²) full-table compare.
-4. **Score** (`app/services/scoring.py`): six explainable component scores
-   (description 30%, specification 25%, category 15%, UOM 10%, image 15%,
-   attributes 5%), each independently inspectable, blended into one final
-   confidence score.
-5. **Decide** (`app/services/decision_engine.py`):
-   - `≥ 95%` → `AUTO_HARMONIZATION` — a Common Material Code is generated
-     immediately (transaction-safe DB sequence), linked to both materials,
-     and the action is written to the audit log.
-   - `85% – 94.99%` → `HUMAN_REVIEW_REQUIRED` — an Approval Request is
-     created and the Material Expert role is notified. No master update
-     happens until a human acts.
-   - `60% – 84.99%` → `LOW_CONFIDENCE` — nothing is auto-created; the
-     uploader can manually request expert review.
-   - `< 60%` → `NO_COMMON_CODE` — the material is left as-is.
-
-The `/materials/:id/analysis` page renders every component score with a
-progress bar and a plain-language reason, never just a single percentage.
-
----
-
-## 10. How Human Approval Works
-
-The **Approval Center** (`/approvals`) lists every pending `HUMAN_REVIEW_REQUIRED`
-or manually-submitted request. Opening one (`/approvals/:id`) shows a
-field-by-field, side-by-side comparison (description, specification,
-category, UOM, manufacturer, brand, image) each flagged `Same` / `Similar` /
-`Different`. A Material Expert or Admin can:
-
-- **Approve** — generates/reuses a Common Material Code and updates the
-  Common Material Master.
-- **Merge** — same effect as approve, recorded distinctly for reporting.
-- **Reject** / **Not Same Material** — no master update; the requester is
-  notified with the reason.
-- **Request More Information** — leaves the request open and notifies the
-  original uploader.
-
-Every action is written to `approval_actions` (`approved_by`, `remarks`,
-timestamp) and mirrored into the global `audit_logs` table.
-
----
-
-## 11. How Common Codes Are Generated
-
-`app/services/code_generator.py` builds
-`<MATERIAL-TYPE-SHORT>-<CATEGORY-SHORT>-<SEQUENCE>` (e.g. `CS-PIPE-00124`,
-`BALL-VALVE-00087`). The sequence comes from a real PostgreSQL sequence
-(`common_material_code_seq`, created by the initial migration) — `nextval()`
-is atomic at the database level, so concurrent Celery workers can never
-collide or double-issue a code. Codes are **never** a concatenation of the
-source material codes.
-
----
-
-## 12. Governance Rule
-
-AI never silently writes to the Common Material Master. The three steps are
-strictly separated in the schema and the code path:
-
-- **AI recommendation** → `ai_analysis` + `material_matches` rows (read-only
-  facts about what the AI found).
-- **Human approval** (when required) → `approval_requests` +
-  `approval_actions`.
-- **Master update** → only `app/services/harmonization_service.py`
-  (`approve_harmonization`) ever writes `common_material_codes` /
-  `materials.common_code_id`, and every call is paired with an
-  `audit_logs` entry in the same transaction — including the automatic
-  ≥95% path, which is still fully logged as an `AI ENGINE` actor.
-
----
-
-## 13. Testing
+## 19. Testing
 
 ```bash
 docker compose exec backend pytest -v
 ```
 
-Covers: weighted scoring math (`test_scoring.py`), the four decision
-boundaries — 96%→AUTO, 90%→HUMAN_REVIEW, 75%→LOW_CONFIDENCE,
-55%→NO_COMMON_CODE — (`test_decision_engine.py`), JWT auth/register/login
-(`test_auth.py`), and the materials API including RBAC (CPSE-scoped uploads,
-viewer cannot create, duplicate code rejection) in `test_materials_api.py`.
-Integration tests spin up an isolated `material_harmonization_test` database
-on the same Postgres instance.
+Covers: weighted scoring math and decision-engine category boundaries
+(`test_scoring.py`, `test_decision_engine.py`), the six required harmonization
+fixtures from the spec (`test_harmonization_cases.py`), connector behavior including
+SQL-injection-safe identifier validation, paging, and incremental cursoring against a
+throwaway SQLite database (`test_connectors.py`), mapping governance/idempotency and
+the approved-mapping-protection invariant (`test_mapping_governance.py`), JWT
+auth/RBAC (`test_auth.py`), CPSE/material/legacy-code/duplicate-detection read APIs,
+and the XGBoost fallback + safety-gate blend logic (`test_xgboost_ranker.py`).
 
 ---
 
-## 14. Demo Script (matches the three scripted scenarios)
+## 20. Terminology
 
-The seed script (`python -m app.seed`) creates 12 duplicate material groups
-across 10 CPSEs (pipes, valves, bearings, lubricants, flanges, motors, pumps,
-cables, transformers, fasteners, gaskets, industrial chemicals), ~100
-standalone materials, and a couple of explicitly engineered edge cases, then
-runs every material through the **real** AI pipeline (embeddings from the
-live `sentence-transformers/all-MiniLM-L6-v2` model when available, no
-hardcoded scores). A representative run against the seed data produced:
+CPSE Material · Common Material · Common National Material Code · Common Material
+Master · Material Harmonization · Duplicate Material · Near-Duplicate Material ·
+Functionally Equivalent Material · Technical Conflict · Legacy Material Code ·
+Material Mapping · Procurement Aggregation · Material Master Governance.
 
-1. **High confidence (≥95%)** — `IOCL-PIP-1023` (Carbon Steel Seamless Pipe,
-   ASTM A106 Grade B, 4") matched `ONGC-4481` (Seamless Carbon Steel Pipe,
-   ASTM A106 Gr.B, 4") at **96.2%** and was auto-harmonized into a new
-   Common Material Code with no human step — check the Common Material
-   Master. The other two CPSEs in the same physical group,
-   `BPCL-CS-0912` and `HPCL-P-7821`, scored 92–94% against each other (see
-   next point) rather than jumping straight to auto-harmonization — a
-   realistic outcome, since each material is scored against its own single
-   best candidate, not the whole group at once.
-2. **Human review (85–95%)** — `HPCL-P-7821` vs `IOCL-PIP-1023` (**94.0%**),
-   `BPCL-CS-0912` vs `HPCL-P-7821` (**92.3%**), and `ONGC-VLV-9091` vs
-   `ONGC-6612` (**90.0%**, Cast Steel Gate Valve, same size but different
-   pressure class) all landed in the human-review band. Open the Approval
-   Center, review the side-by-side comparison, and click Approve — approving
-   `HPCL-P-7821` reuses the Common Material Code already created in step 1
-   (since its top candidate is already harmonized), and approving
-   `BPCL-CS-0912` next folds it into the same code too. This is the intended
-   governance behavior: the ≥95% pair auto-harmonizes instantly, and the
-   rest of the group joins only once a Material Expert confirms it.
-3. **Low confidence / no match (<85%)** — `HPCL-CBL-5502` (PVC Insulated
-   Electrical Cable) scored 78.5% against the nearest cable in the catalogue
-   — too low to harmonize automatically, with an option to request expert
-   review. Among the randomly-sized standalone materials, a few pairs with
-   no real counterpart in the catalogue (e.g. a lone 65" flange) score in
-   the 40–55% range and land on `NO_COMMON_CODE`, showing "No sufficiently
-   similar material found."
-
-Because scoring runs against live embeddings rather than fixed numbers, your
-exact percentages may differ slightly by a point or two between runs or AI
-backends (real model vs. mock fallback) — the point of the demo is the four
-*decision bands*, which are deterministic given the score, not the specific
-decimal.
-
----
-
-## 15. API Documentation
-
-Full interactive documentation is served by FastAPI itself:
-
-- Swagger UI → http://localhost:8000/docs
-- ReDoc → http://localhost:8000/redoc
-
-Endpoint groups: `/api/auth`, `/api/materials` (+ `/search`, `/{id}/similar`,
-`/bulk/validate`, `/bulk/import`), `/api/ai`, `/api/harmonization`,
-`/api/approvals`, `/api/common-codes`, `/api/cpse`, `/api/dashboard`,
-`/api/audit-logs`, `/api/notifications`, `/api/settings`.
+The official product name is **AI-Powered National Unified Material Master** — not an
+"ERP Harmonizer", "Upload Manager", or "Source DB Manager".

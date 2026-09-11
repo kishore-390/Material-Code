@@ -4,25 +4,48 @@ from typing import Optional
 
 from pydantic import BaseModel
 
-from app.schemas.common_code import CommonMaterialCodeOut
-from app.schemas.material import CommonCodeBrief, MaterialOut
+from app.schemas.material import CPSEMaterialOut
 
 
-class HarmonizationRequestCreate(BaseModel):
-    material_id: uuid.UUID
-    candidate_material_id: Optional[uuid.UUID] = None
-    notes: Optional[str] = None
-
-
-class HarmonizationRequestOut(BaseModel):
+class CommonMaterialOut(BaseModel):
     id: uuid.UUID
-    material: MaterialOut
-    candidate: Optional[MaterialOut] = None
-    request_type: str
+    common_code: str
+    standardized_description: str
+    standardized_specification: Optional[str] = None
+    material_type: str
+    material_grade: Optional[str] = None
+    dimensions: Optional[str] = None
+    standardized_uom: str
+    standard: Optional[str] = None
+    function: Optional[str] = None
+    criticality: str
+    classification: str
+    classification_path: Optional[list] = None
     status: str
-    ai_score: Optional[float] = None
-    common_code: Optional[CommonMaterialCodeOut] = None
-    notes: Optional[str] = None
+    confidence: Optional[float] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class CommonMaterialDetailOut(CommonMaterialOut):
+    mapped_materials: list[CPSEMaterialOut] = []
+    mapped_cpses: list[str] = []
+
+
+class MappingOut(BaseModel):
+    id: uuid.UUID
+    common_material: CommonMaterialOut
+    cpse_material: CPSEMaterialOut
+    matched_against: Optional[CPSEMaterialOut] = None
+    mapping_type: str
+    decision_status: str
+    confidence_score: Optional[float] = None
+    evidence: Optional[dict] = None
+    reason: Optional[str] = None
+    approved_by: Optional[uuid.UUID] = None
+    approved_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
 
@@ -30,37 +53,8 @@ class HarmonizationRequestOut(BaseModel):
         from_attributes = True
 
 
-class HarmonizationActionRequest(BaseModel):
-    remarks: Optional[str] = None
-
-
-class ScanTriggerResponse(BaseModel):
-    queued: int
-    material_ids: list[uuid.UUID]
-    mode: str  # "QUEUED" (Celery) or "PROCESSED_INLINE" (no broker reachable - ran synchronously)
-
-
-class ScanStatusRequest(BaseModel):
-    material_ids: list[uuid.UUID]
-
-
-class ScanStatusItem(BaseModel):
-    material_id: uuid.UUID
-    material_code: str
-    cpse_code: str
-    description: str
-    category: str
-    material_status: str
-    latest_decision: Optional[str] = None
-    ai_confidence: Optional[float] = None
-    technical_conflict: bool = False
-    conflict_reason: Optional[str] = None
-    best_candidate_material_code: Optional[str] = None
-    best_candidate_cpse_code: Optional[str] = None
-    common_code: Optional[CommonCodeBrief] = None
-
-
-class ScanStatusResponse(BaseModel):
+class MappingListResponse(BaseModel):
+    items: list[MappingOut]
     total: int
-    completed: int
-    items: list[ScanStatusItem]
+    page: int
+    page_size: int

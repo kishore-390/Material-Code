@@ -1,31 +1,31 @@
 """
-Builds a labeled material-pair training dataset from the IOCL/ONGC
-material records already present in the application's own `materials`
-table (the source of truth since the demo per-CPSE source databases and
-their connectors were retired - no live external fetch is needed or
-possible anymore).
+Builds a labeled material-pair training dataset from CPSE material records
+already present in the central database (e.g. from app.demo_seed, or real
+synced CPSE data). Requires at least two CPSEs with overlapping material
+groups to be present - run app.demo_seed first in a development environment.
 
-*** Prototype labeled material-pair dataset derived from representative
-*** IOCL/ONGC demo records - not real production CPSE data.
+*** When run against app.demo_seed's data, this is a prototype labeled
+*** material-pair dataset derived from representative demo records - not
+*** real production CPSE data.
 
 Labeling is a reproducible rule, not hand-picked pairs:
 
-  POSITIVE      cross-CPSE pair whose NORMALIZED category AND NORMALIZED
-                specification are identical - the exact same oracle
-                app.services.normalization already uses at inference
-                time, applied here as a strict equality gate.
-  HARD NEGATIVE same normalized category, different normalized
+  POSITIVE      cross-CPSE pair whose NORMALIZED classification AND
+                NORMALIZED specification are identical - the exact same
+                oracle app.services.normalization already uses at
+                inference time, applied here as a strict equality gate.
+  HARD NEGATIVE same normalized classification, different normalized
                 specification (e.g. two pipes of different grade/standard)
                 - stops the model from learning the trivial shortcut
-                "same category => match".
-  EASY NEGATIVE different normalized category entirely
+                "same classification => match".
+  EASY NEGATIVE different normalized classification entirely
                 (e.g. pipe vs drilling equipment) - the spec's own
                 "pipe vs drill bit" example.
 
-Every pair's features are the exact six ScoreBreakdown components the
-live pipeline already computes via analyzer._score_pair - not a separate
-feature path - so the model trains on precisely what it sees at
-inference time. Material codes are never a feature.
+Every pair's features are the exact ScoreBreakdown components the live
+pipeline already computes via analyzer._score_pair - not a separate feature
+path - so the model trains on precisely what it sees at inference time.
+Material codes are never a feature.
 """
 import logging
 import random
@@ -35,8 +35,8 @@ from sqlalchemy.orm import Session
 
 from app.ai.analyzer import _attributes_dict, _score_pair, ensure_embeddings
 from app.ai.ml_ranker import extract_features
-from app.models.cpse import CPSEOrganization
-from app.models.material import Material
+from app.models.cpse import CPSE
+from app.models.material import CPSEMaterial
 
 logger = logging.getLogger(__name__)
 
@@ -45,22 +45,22 @@ MIN_EASY_NEGATIVES = 20
 TRAINING_CPSES = ("IOCL", "ONGC")
 
 
-def sync_all_sources(db: Session) -> dict[str, Material]:
-    """Loads every IOCL/ONGC material already present in the application's
-    own `materials` table. Returns {"CPSE:CODE": Material}."""
-    materials: dict[str, Material] = {}
+def sync_all_sources(db: Session) -> dict[str, CPSEMaterial]:
+    """Loads every IOCL/ONGC material already present in the central
+    database. Returns {"CPSE:CODE": CPSEMaterial}."""
+    materials: dict[str, CPSEMaterial] = {}
     rows = (
-        db.query(Material)
-        .join(CPSEOrganization, Material.cpse_id == CPSEOrganization.id)
-        .filter(CPSEOrganization.code.in_(TRAINING_CPSES))
+        db.query(CPSEMaterial)
+        .join(CPSE, CPSEMaterial.cpse_id == CPSE.id)
+        .filter(CPSE.code.in_(TRAINING_CPSES))
         .all()
     )
     for m in rows:
-        materials[f"{m.cpse.code}:{m.material_code}"] = m
+        materials[f"{m.cpse.code}:{m.original_material_code}"] = m
     return materials
 
 
-def build_labeled_pairs(materials: dict[str, Material], seed: int = RANDOM_SEED) -> list[tuple[str, str, int, str]]:
+def build_labeled_pairs(materials: dict[str, CPSEMaterial], seed: int = RANDOM_SEED) -> list[tuple[str, str, int, str]]:
     """Returns [(key_a, key_b, label, reason), ...] over IOCL x ONGC cross-source pairs only."""
     iocl_keys = sorted(k for k in materials if k.startswith("IOCL:"))
     ongc_keys = sorted(k for k in materials if k.startswith("ONGC:"))
@@ -73,15 +73,15 @@ def build_labeled_pairs(materials: dict[str, Material], seed: int = RANDOM_SEED)
         a = materials[ka]
         for kb in ongc_keys:
             b = materials[kb]
-            same_category = bool(a.normalized_category) and a.normalized_category == b.normalized_category
-            if same_category:
+            same_classification = bool(a.normalized_classification) and a.normalized_classification == b.normalized_classification
+            if same_classification:
                 same_spec = bool(a.normalized_specification) and a.normalized_specification == b.normalized_specification
                 if same_spec:
-                    positives.append((ka, kb, 1, "same normalized category + specification"))
+                    positives.append((ka, kb, 1, "same normalized classification + specification"))
                 else:
-                    hard_negatives.append((ka, kb, 0, "same category, different specification"))
+                    hard_negatives.append((ka, kb, 0, "same classification, different specification"))
             else:
-                easy_negatives.append((ka, kb, 0, "different category"))
+                easy_negatives.append((ka, kb, 0, "different classification"))
 
     rng = random.Random(seed)
     target_easy = min(len(easy_negatives), max(len(positives) + len(hard_negatives), MIN_EASY_NEGATIVES))
@@ -95,7 +95,7 @@ def build_labeled_pairs(materials: dict[str, Material], seed: int = RANDOM_SEED)
 
 
 def compute_feature_rows(
-    db: Session, materials: dict[str, Material], pairs: list[tuple[str, str, int, str]]
+    db: Session, materials: dict[str, CPSEMaterial], pairs: list[tuple[str, str, int, str]]
 ) -> pd.DataFrame:
     unique_keys = {k for pair in pairs for k in (pair[0], pair[1])}
     embeddings = {}
@@ -116,8 +116,8 @@ def compute_feature_rows(
                 "material_a": key_a,
                 "material_b": key_b,
                 "reason": reason,
-                "description_a": a.description,
-                "description_b": b.description,
+                "description_a": a.original_description,
+                "description_b": b.original_description,
             }
         )
         rows.append(row)

@@ -1,22 +1,37 @@
 import { Badge, type BadgeProps } from "@/components/ui/badge";
 
 const STATUS_VARIANTS: Record<string, NonNullable<BadgeProps["variant"]>> = {
+  // Material status
   PENDING: "warning",
   PROCESSING: "brand",
   ANALYZED: "brand",
   HARMONIZED: "success",
-  REJECTED: "danger",
   FAILED: "danger",
+  // Match decision (spec section 8)
+  IDENTICAL: "success",
+  DUPLICATE: "success",
+  NEAR_DUPLICATE: "brand",
+  FUNCTIONALLY_EQUIVALENT: "brand",
+  MANUAL_REVIEW: "warning",
+  TECHNICAL_CONFLICT: "danger",
+  NOT_EQUIVALENT: "outline",
+  // Mapping decision status (spec section 5.4)
+  AI_RECOMMENDED: "brand",
+  PENDING_VALIDATION: "warning",
   APPROVED: "success",
-  AUTO_APPROVED: "success",
-  MORE_INFO_REQUESTED: "warning",
-  MERGED: "success",
-  NOT_SAME_MATERIAL: "danger",
-  AUTO_HARMONIZATION: "success",
-  HUMAN_REVIEW_REQUIRED: "warning",
-  LOW_CONFIDENCE: "warning",
-  NO_COMMON_CODE: "danger",
-  AUTO_GENERATED: "brand",
+  EDITED_AND_APPROVED: "success",
+  REJECTED: "danger",
+  // Common material status (spec section 13)
+  ACTIVE: "brand",
+  MAPPED: "success",
+  RATIONALIZED: "success",
+  RETIRED: "outline",
+  REPLACED: "outline",
+  // Sync status
+  RUNNING: "brand",
+  SUCCESS: "success",
+  PARTIAL: "warning",
+  NEVER_SYNCED: "outline",
 };
 
 function label(status: string) {

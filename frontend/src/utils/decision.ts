@@ -1,52 +1,63 @@
-import { AlertTriangle, CheckCircle2, HelpCircle, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, HelpCircle, ShieldAlert, XCircle } from "lucide-react";
 
-import type { Decision } from "@/types";
+import type { MatchDecision } from "@/types";
 
 export interface DecisionMeta {
-  confidenceLabel: "HIGH CONFIDENCE" | "MEDIUM CONFIDENCE" | "LOW CONFIDENCE" | "NOT MATCHED";
-  recommendation: "Same Material / Functionally Equivalent" | "Possibly Equivalent" | "Different Material";
-  statusLabel: string;
+  label: string;
   icon: typeof CheckCircle2;
   tone: string;
-  badgeVariant: "success" | "warning" | "danger";
+  badgeVariant: "success" | "warning" | "danger" | "brand" | "outline";
   description: string;
 }
 
-export const DECISION_META: Record<Decision, DecisionMeta> = {
-  AUTO_HARMONIZATION: {
-    confidenceLabel: "HIGH CONFIDENCE",
-    recommendation: "Same Material / Functionally Equivalent",
-    statusLabel: "AUTO-MAPPED",
+export const DECISION_META: Record<MatchDecision, DecisionMeta> = {
+  IDENTICAL: {
+    label: "IDENTICAL",
     icon: CheckCircle2,
     tone: "text-success-600",
     badgeVariant: "success",
-    description: "AI confidence meets the auto-harmonization threshold. Mapped automatically; no human action required.",
+    description: "Every key technical attribute matches exactly - these are the same material.",
   },
-  HUMAN_REVIEW_REQUIRED: {
-    confidenceLabel: "MEDIUM CONFIDENCE",
-    recommendation: "Possibly Equivalent",
-    statusLabel: "PENDING REVIEW",
+  DUPLICATE: {
+    label: "DUPLICATE",
+    icon: CheckCircle2,
+    tone: "text-success-600",
+    badgeVariant: "success",
+    description: "AI confidence meets the auto-harmonization threshold.",
+  },
+  NEAR_DUPLICATE: {
+    label: "NEAR DUPLICATE",
     icon: HelpCircle,
-    tone: "text-warning-600",
-    badgeVariant: "warning",
-    description: "AI found a plausible match, but a Material Expert must validate this pairing in the Approval Center before a common code is finalized.",
+    tone: "text-brand-600",
+    badgeVariant: "brand",
+    description: "A strong candidate match - human confirmation is required before harmonization.",
   },
-  LOW_CONFIDENCE: {
-    confidenceLabel: "LOW CONFIDENCE",
-    recommendation: "Different Material",
-    statusLabel: "MANUAL REVIEW REQUIRED",
+  FUNCTIONALLY_EQUIVALENT: {
+    label: "FUNCTIONALLY EQUIVALENT",
+    icon: HelpCircle,
+    tone: "text-brand-600",
+    badgeVariant: "brand",
+    description: "These materials serve the same function and classification despite differing wording.",
+  },
+  MANUAL_REVIEW: {
+    label: "MANUAL REVIEW",
     icon: AlertTriangle,
     tone: "text-warning-600",
     badgeVariant: "warning",
-    description: "AI confidence is below the review threshold. Manual review is required before any harmonization action.",
+    description: "AI confidence is insufficient for automatic classification - manual review is required.",
   },
-  NO_COMMON_CODE: {
-    confidenceLabel: "NOT MATCHED",
-    recommendation: "Different Material",
-    statusLabel: "NO COMMON CODE",
-    icon: XCircle,
+  TECHNICAL_CONFLICT: {
+    label: "TECHNICAL CONFLICT",
+    icon: ShieldAlert,
     tone: "text-danger-600",
     badgeVariant: "danger",
-    description: "No sufficiently similar material was found. A common material code cannot be recommended.",
+    description: "A technical conflict was detected between key specifications - never auto-harmonized.",
+  },
+  NOT_EQUIVALENT: {
+    label: "NOT EQUIVALENT",
+    icon: XCircle,
+    tone: "text-slate-500",
+    badgeVariant: "outline",
+    description: "No sufficiently similar material found - not considered equivalent.",
   },
 };

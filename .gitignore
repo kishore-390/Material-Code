@@ -14,14 +14,6 @@ backend/app/ml_models/
 node_modules/
 frontend/dist/
 
-# Uploaded files (keep directory structure, ignore contents)
-uploads/materials/*
-uploads/documents/*
-uploads/images/*
-!uploads/materials/.gitkeep
-!uploads/documents/.gitkeep
-!uploads/images/.gitkeep
-
 # Unused Vite scaffold
 /app/
 

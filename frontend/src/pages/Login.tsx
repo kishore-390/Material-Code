@@ -9,12 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { apiErrorMessage } from "@/services/api";
 
-const DEMO_ACCOUNTS = [
-  { role: "Admin", username: "admin", password: "Admin@123" },
-  { role: "Material Expert", username: "raj.kumar", password: "Expert@123" },
-  { role: "CPSE User (IOCL)", username: "iocl.user", password: "Cpse@123" },
-  { role: "Viewer", username: "viewer", password: "Viewer@123" },
-];
+const DEMO_ACCOUNTS = [{ role: "Admin", username: "admin", password: "Admin@123" }];
 
 export default function Login() {
   const { user, login } = useAuth();
@@ -58,16 +53,16 @@ export default function Login() {
               <Landmark className="h-6 w-6" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold uppercase leading-tight tracking-wide">CPSE Material Harmonization</h1>
-              <p className="mt-4 text-xs text-slate-400">AI-Powered CPSE Material Harmonization Platform</p>
+              <h1 className="text-2xl font-bold uppercase leading-tight tracking-wide">National Unified Material Master</h1>
+              <p className="mt-4 text-xs text-slate-400">AI-Powered National Unified Material Master Platform</p>
             </div>
             <p className="text-xs font-semibold uppercase tracking-wide text-warning-500">Prototype for Demonstration</p>
           </div>
 
           <Card className="rounded-none border-0">
             <CardContent className="p-10">
-              <h2 className="text-xl font-bold text-slate-900">CPSE Material Harmonization Platform</h2>
-              <p className="mb-6 mt-1 text-sm text-slate-500">Sign in to access your material harmonization workspace</p>
+              <h2 className="text-xl font-bold text-slate-900">One Nation - One Common Material Code</h2>
+              <p className="mb-6 mt-1 text-sm text-slate-500">Sign in to access the National Material Master workspace</p>
 
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="space-y-1.5">

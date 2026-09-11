@@ -1,35 +1,29 @@
 import { api } from "@/services/api";
-import type { HarmonizationRequest, ScanStatusResponse, ScanTriggerResponse } from "@/types";
+import type { DuplicateListResponse, DuplicatePairDetail } from "@/types";
 
-export async function listHarmonizationRequests(status?: string, cpseId?: string) {
-  const { data } = await api.get<HarmonizationRequest[]>("/harmonization", {
-    params: { status, cpse_id: cpseId || undefined },
-  });
+export interface HarmonizationListParams {
+  q?: string;
+  cpse_id?: string;
+  page?: number;
+  page_size?: number;
+}
+
+export type HarmonizationView = "recommendations" | "duplicates" | "near-duplicates" | "functional-equivalence" | "technical-conflicts";
+
+export async function listHarmonizationView(view: HarmonizationView, params: HarmonizationListParams = {}) {
+  const { data } = await api.get<DuplicateListResponse>(`/harmonization/${view}`, { params });
   return data;
 }
 
-export async function getHarmonizationRequest(id: string) {
-  const { data } = await api.get<HarmonizationRequest>(`/harmonization/${id}`);
+export async function getPair(mappingId: string) {
+  const { data } = await api.get<DuplicatePairDetail>(`/harmonization/pairs/${mappingId}`);
   return data;
 }
 
-export async function createHarmonizationRequest(payload: {
-  material_id: string;
-  candidate_material_id?: string;
-  notes?: string;
-}) {
-  const { data } = await api.post<HarmonizationRequest>("/harmonization/request", payload);
-  return data;
-}
-
-export async function approveHarmonization(id: string, remarks?: string) {
-  const { data } = await api.post<HarmonizationRequest>(`/harmonization/${id}/approve`, { remarks });
-  return data;
-}
-
-export async function rejectHarmonization(id: string, remarks?: string) {
-  const { data } = await api.post<HarmonizationRequest>(`/harmonization/${id}/reject`, { remarks });
-  return data;
+export interface ScanTriggerResponse {
+  queued: number;
+  material_ids: string[];
+  mode: "QUEUED" | "PROCESSED_INLINE";
 }
 
 export async function scanMaterialMasters(cpseId?: string) {
@@ -40,13 +34,6 @@ export async function scanMaterialMasters(cpseId?: string) {
 }
 
 export async function getScanStatus(materialIds: string[]) {
-  const { data } = await api.post<ScanStatusResponse>("/harmonization/scan-status", {
-    material_ids: materialIds,
-  });
-  return data;
-}
-
-export async function fullDatabaseScan() {
-  const { data } = await api.post<ScanTriggerResponse>("/harmonization/full-database-scan");
+  const { data } = await api.post<{ total: number; completed: number }>("/harmonization/scan-status", materialIds);
   return data;
 }

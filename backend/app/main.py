@@ -1,9 +1,7 @@
 import logging
-import os
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 
 from app.api.router import api_router
 from app.core.config import settings
@@ -14,7 +12,7 @@ logging.basicConfig(level=logging.INFO)
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
-    description="AI-Powered CPSE Material Harmonization Platform",
+    description="AI-Powered National Unified Material Master Platform",
     version="1.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
@@ -37,9 +35,6 @@ def on_startup() -> None:
         logging.getLogger(__name__).warning("Could not initialize DB extensions on startup: %s", exc)
 
 
-os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
-app.mount("/uploads", StaticFiles(directory=settings.UPLOAD_DIR), name="uploads")
-
 app.include_router(api_router)
 
 
@@ -47,7 +42,7 @@ app.include_router(api_router)
 def root():
     return {
         "project": "ONE NATION - ONE COMMON MATERIAL CODE",
-        "description": "AI-Powered CPSE Material Harmonization Platform",
+        "description": "AI-Powered National Unified Material Master Platform",
         "docs": "/docs",
     }
 

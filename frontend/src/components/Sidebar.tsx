@@ -2,14 +2,27 @@ import {
   BarChart3,
   Bell,
   Boxes,
-  Building2,
+  CheckCircle2,
   CheckSquare,
+  Clock,
+  Copy,
   Database,
+  FileClock,
+  FileUp,
+  GitCompareArrows,
   Landmark,
   Layers,
   LayoutDashboard,
+  ListTree,
+  Network,
   ScrollText,
   Settings as SettingsIcon,
+  ShieldAlert,
+  Sparkles,
+  Tags,
+  TrendingUp,
+  Wallet,
+  XCircle,
 } from "lucide-react";
 import { NavLink } from "react-router-dom";
 
@@ -30,46 +43,69 @@ interface NavGroup {
   items: NavItem[];
 }
 
+// Spec section 17 - National Material Master navigation tree.
 const NAV_GROUPS: NavGroup[] = [
   {
     label: "Home",
     items: [{ to: "/dashboard", label: "Dashboard", icon: LayoutDashboard }],
   },
   {
-    label: "Material Data",
-    items: [{ to: "/materials", label: "Materials", icon: Boxes, end: true }],
+    label: "Material Master",
+    items: [
+      { to: "/materials", label: "All Materials", icon: Boxes },
+      { to: "/common-material-master", label: "Common Materials", icon: Layers },
+      { to: "/materials/cpse", label: "CPSE Materials", icon: Database },
+      { to: "/legacy-codes", label: "Legacy Codes", icon: FileClock },
+    ],
   },
   {
-    label: "AI Harmonization",
+    label: "Harmonization",
     items: [
-      { to: "/harmonization", label: "Match Recommendations", icon: Layers },
-      {
-        to: "/harmonization/full-database",
-        label: "Full Database Analysis",
-        icon: Database,
-        roles: ["ADMIN", "MATERIAL_EXPERT"],
-      },
+      { to: "/harmonization/recommendations", label: "AI Recommendations", icon: Sparkles },
+      { to: "/harmonization/duplicates", label: "Duplicate Materials", icon: Copy },
+      { to: "/harmonization/near-duplicates", label: "Near Duplicates", icon: GitCompareArrows },
+      { to: "/harmonization/functional-equivalence", label: "Functional Equivalence", icon: CheckCircle2 },
+      { to: "/harmonization/technical-conflicts", label: "Technical Conflicts", icon: ShieldAlert },
+    ],
+  },
+  {
+    label: "CPSE Network",
+    items: [
+      { to: "/cpse", label: "Participating CPSEs", icon: Landmark },
+      { to: "/synchronization", label: "Data Synchronization", icon: Network, roles: ["ADMIN", "MATERIAL_EXPERT"] },
+      { to: "/demo-import", label: "Demo Data Import", icon: FileUp, roles: ["ADMIN", "MATERIAL_EXPERT"] },
+    ],
+  },
+  {
+    label: "Approvals",
+    items: [
+      { to: "/approvals/pending", label: "Pending Validation", icon: Clock, roles: ["ADMIN", "MATERIAL_EXPERT", "REVIEWER", "VIEWER"] },
+      { to: "/approvals/approved", label: "Approved", icon: CheckSquare, roles: ["ADMIN", "MATERIAL_EXPERT", "REVIEWER", "VIEWER"] },
+      { to: "/approvals/rejected", label: "Rejected", icon: XCircle, roles: ["ADMIN", "MATERIAL_EXPERT", "REVIEWER", "VIEWER"] },
+    ],
+  },
+  {
+    label: "Analytics",
+    items: [
+      { to: "/analytics", label: "Material Master Analytics", icon: BarChart3, end: true },
+      { to: "/analytics/procurement", label: "Procurement Analytics", icon: Wallet },
+      { to: "/analytics/classification", label: "Classification Distribution", icon: Tags },
+      { to: "/analytics/trends", label: "Harmonization Trends", icon: TrendingUp },
     ],
   },
   {
     label: "Governance",
     items: [
-      { to: "/approvals", label: "Approval Center", icon: CheckSquare, roles: ["ADMIN", "MATERIAL_EXPERT", "VIEWER"] },
-      { to: "/common-material-master", label: "Common Material Master", icon: Layers },
-      { to: "/cpse", label: "Organizations", icon: Building2 },
-    ],
-  },
-  {
-    label: "Reports & Monitoring",
-    items: [
-      { to: "/analytics", label: "Analytics", icon: BarChart3 },
-      { to: "/audit-log", label: "Audit Log", icon: ScrollText, roles: ["ADMIN", "MATERIAL_EXPERT", "VIEWER"] },
-      { to: "/notifications", label: "Notifications", icon: Bell },
+      { to: "/audit-log", label: "Audit Trail", icon: ScrollText, roles: ["ADMIN", "MATERIAL_EXPERT", "REVIEWER", "VIEWER"] },
+      { to: "/governance/rules", label: "Rules & Policies", icon: ListTree, roles: ["ADMIN"] },
     ],
   },
   {
     label: "System",
-    items: [{ to: "/settings", label: "Settings", icon: SettingsIcon, roles: ["ADMIN"] }],
+    items: [
+      { to: "/notifications", label: "Notifications", icon: Bell },
+      { to: "/settings", label: "Settings", icon: SettingsIcon, roles: ["ADMIN"] },
+    ],
   },
 ];
 
@@ -94,7 +130,7 @@ export function Sidebar({ mobileOpen, onCloseMobile }: SidebarProps) {
         </div>
         <div className="md:hidden lg:block">
           <p className="text-[10px] font-semibold uppercase leading-tight tracking-wider text-slate-500">Government of India</p>
-          <p className="text-[12px] font-bold uppercase leading-tight tracking-wider text-navy-900">CPSE Material Harmonization</p>
+          <p className="text-[12px] font-bold uppercase leading-tight tracking-wider text-navy-900">National Material Master</p>
         </div>
       </div>
 
@@ -131,9 +167,9 @@ export function Sidebar({ mobileOpen, onCloseMobile }: SidebarProps) {
       </nav>
 
       <div className="border-t border-slate-200 px-4 py-3 text-[11px] leading-tight text-slate-400 md:hidden lg:block">
-        AI-Powered CPSE Material
+        AI-Powered National Unified
         <br />
-        Harmonization Platform
+        Material Master Platform
       </div>
     </>
   );

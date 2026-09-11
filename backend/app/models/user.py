@@ -28,8 +28,8 @@ class User(Base, UUIDMixin, TimestampMixin):
 
     role_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("roles.id"), nullable=False)
     cpse_id: Mapped[Optional[uuid.UUID]] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("cpse_organizations.id"), nullable=True
+        UUID(as_uuid=True), ForeignKey("cpses.id"), nullable=True
     )
 
     role: Mapped["Role"] = relationship(back_populates="users")
-    cpse: Mapped[Optional["CPSEOrganization"]] = relationship(back_populates="users")
+    cpse: Mapped[Optional["CPSE"]] = relationship(back_populates="users")

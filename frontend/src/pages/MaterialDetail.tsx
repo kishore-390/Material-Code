@@ -10,7 +10,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { triggerAnalysis } from "@/services/ai";
-import { resolveImageUrl } from "@/services/api";
 import { findSimilarMaterials, getMaterial } from "@/services/materials";
 
 export default function MaterialDetail() {
@@ -46,17 +45,17 @@ export default function MaterialDetail() {
     <div className="space-y-6">
       <div className="flex items-start justify-between border-b border-slate-300 pb-4">
         <div className="space-y-2">
-          <Breadcrumbs items={[{ label: "Material Management", to: "/materials" }, { label: material.material_code }]} />
+          <Breadcrumbs items={[{ label: "Material Master", to: "/materials" }, { label: material.original_material_code }]} />
           <div className="flex items-center gap-2">
-            <h1 className="text-xl font-bold text-slate-900">{material.material_code}</h1>
+            <h1 className="text-xl font-bold text-slate-900">{material.original_material_code}</h1>
             <StatusBadge status={material.status} />
           </div>
-          <p className="text-sm text-slate-500">{material.description}</p>
+          <p className="text-sm text-slate-500">{material.original_description}</p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => analyzeMutation.mutate()} disabled={analyzeMutation.isPending}>
             <Sparkles className="h-4 w-4" />
-            {analyzeMutation.isPending ? "Queuing..." : "Run AI Analysis"}
+            {analyzeMutation.isPending ? "Queuing..." : "Re-run AI Analysis"}
           </Button>
           <Button asChild>
             <Link to={`/materials/${id}/analysis`}>View AI Analysis</Link>
@@ -64,16 +63,16 @@ export default function MaterialDetail() {
         </div>
       </div>
 
-      {material.common_code && (
+      {material.active_common_material && (
         <Card className="border-success-600/30 bg-success-50/40">
           <CardContent className="flex flex-wrap items-center justify-between gap-3 py-4">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-success-700">AI Status: Harmonized</p>
-              <p className="mt-1 text-lg font-bold text-success-700">{material.common_code.code}</p>
-              <p className="text-sm text-slate-600">{material.common_code.standard_description}</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-success-700">Common Material Status</p>
+              <p className="mt-1 text-lg font-bold text-success-700">{material.active_common_material.common_code}</p>
+              <p className="text-sm text-slate-600">{material.active_common_material.standardized_description}</p>
             </div>
             <Button asChild variant="outline">
-              <Link to={`/common-material-master/${material.common_code.code}`}>View Common Material</Link>
+              <Link to={`/common-material-master/${material.active_common_material.common_code}`}>View Common Material</Link>
             </Button>
           </CardContent>
         </Card>
@@ -82,58 +81,42 @@ export default function MaterialDetail() {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <CardHeader>
-            <CardTitle>Material Details</CardTitle>
+            <CardTitle>Original CPSE Data</CardTitle>
           </CardHeader>
           <CardContent className="grid grid-cols-2 gap-4 text-sm">
-            <Field label="Specification" value={material.specification} span />
-            <Field label="Normalized Specification" value={material.normalized_specification} span muted />
-            <Field label="Category" value={material.category} />
-            <Field label="Normalized Category" value={material.normalized_category} muted />
+            <Field label="Technical Specification" value={material.technical_specification} span />
+            <Field label="Classification" value={material.classification} />
+            <Field label="Material Type" value={material.material_type} />
+            <Field label="Grade" value={material.material_grade} />
+            <Field label="Dimensions" value={material.dimensions} />
+            <Field label="Standard" value={material.standard} />
             <Field label="UOM" value={material.uom} />
-            <Field label="Normalized UOM" value={material.normalized_uom} muted />
             <Field label="CPSE" value={`${material.cpse.name} (${material.cpse.code})`} />
             <Field label="Manufacturer" value={material.manufacturer} />
-            <Field label="Brand" value={material.brand} />
-            <Field label="Material Type" value={material.material_type} />
-            {material.source_database && (
-              <>
-                <Field label="Source Database" value={material.source_database} />
-                <Field
-                  label="Last Synchronized"
-                  value={material.last_synced_at ? new Date(material.last_synced_at).toLocaleString() : undefined}
-                />
-              </>
+            <Field label="Function" value={material.function} />
+            <Field label="Packaging" value={material.packaging} />
+            <Field label="Criticality" value={material.criticality} />
+            {material.last_synced_at && (
+              <Field label="Last Synchronized" value={new Date(material.last_synced_at).toLocaleString()} />
             )}
-            <Field
-              label="Common Material Code"
-              value={
-                material.common_code ? (
-                  <Link to={`/common-material-master/${material.common_code.code}`} className="text-brand-600 hover:underline">
-                    {material.common_code.code}
-                  </Link>
-                ) : (
-                  "Not harmonized yet"
-                )
-              }
-            />
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle>Image</CardTitle>
+            <CardTitle>AI Harmonization</CardTitle>
           </CardHeader>
-          <CardContent>
-            {material.image_url ? (
-              <img
-                src={resolveImageUrl(material.image_url)}
-                alt={material.description}
-                className="aspect-square w-full rounded-lg border border-slate-100 object-cover"
-              />
+          <CardContent className="space-y-2 text-sm">
+            {material.active_common_material ? (
+              <>
+                <p className="text-xs uppercase tracking-wide text-slate-400">Common Code</p>
+                <Link to={`/common-material-master/${material.active_common_material.common_code}`} className="text-lg font-bold text-brand-600 hover:underline">
+                  {material.active_common_material.common_code}
+                </Link>
+                <StatusBadge status={material.active_common_material.status} />
+              </>
             ) : (
-              <div className="flex aspect-square w-full items-center justify-center rounded-lg border border-dashed border-slate-200 text-xs text-slate-400">
-                No image uploaded
-              </div>
+              <p className="text-slate-400">Not yet mapped to a common material.</p>
             )}
           </CardContent>
         </Card>
@@ -166,31 +149,27 @@ export default function MaterialDetail() {
               <TableRow>
                 <TableHead>Material</TableHead>
                 <TableHead>CPSE</TableHead>
-                <TableHead>Similarity</TableHead>
-                <TableHead>Common Code</TableHead>
                 <TableHead>Status</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {(similar ?? []).map((item) => (
-                <TableRow key={item.material.id}>
+                <TableRow key={item.id}>
                   <TableCell>
-                    <Link to={`/materials/${item.material.id}`} className="text-brand-600 hover:underline">
-                      {item.material.material_code}
+                    <Link to={`/materials/${item.id}`} className="text-brand-600 hover:underline">
+                      {item.original_material_code}
                     </Link>
-                    <p className="text-xs text-slate-400">{item.material.description}</p>
+                    <p className="text-xs text-slate-400">{item.original_description}</p>
                   </TableCell>
-                  <TableCell>{item.material.cpse.code}</TableCell>
-                  <TableCell className="font-semibold">{item.similarity.toFixed(1)}%</TableCell>
-                  <TableCell>{item.material.common_code?.code ?? "—"}</TableCell>
+                  <TableCell>{item.cpse.code}</TableCell>
                   <TableCell>
-                    <StatusBadge status={item.material.status} />
+                    <StatusBadge status={item.status} />
                   </TableCell>
                 </TableRow>
               ))}
               {(similar ?? []).length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-slate-400">
+                  <TableCell colSpan={3} className="text-center text-slate-400">
                     No similar materials found yet. Run AI analysis first.
                   </TableCell>
                 </TableRow>
@@ -207,17 +186,15 @@ function Field({
   label,
   value,
   span,
-  muted,
 }: {
   label: string;
   value?: string | ReactNode | null;
   span?: boolean;
-  muted?: boolean;
 }) {
   return (
     <div className={span ? "col-span-2" : undefined}>
       <p className="text-xs uppercase tracking-wide text-slate-400">{label}</p>
-      <p className={muted ? "text-slate-400" : "font-medium text-slate-800"}>{value || "—"}</p>
+      <p className="font-medium text-slate-800">{value || "Missing attribute"}</p>
     </div>
   );
 }

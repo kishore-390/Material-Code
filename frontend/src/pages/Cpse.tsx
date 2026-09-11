@@ -5,16 +5,17 @@ import { Link } from "react-router-dom";
 
 import { useAuth } from "@/auth/AuthContext";
 import { PageHeader } from "@/components/PageHeader";
+import { StatusBadge } from "@/components/StatusBadge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Textarea } from "@/components/ui/textarea";
 import { apiErrorMessage } from "@/services/api";
-import { createCPSE, listCPSE, setCPSEStatus, updateCPSE, type CPSEFormPayload } from "@/services/cpse";
-import type { CPSEStats } from "@/types";
+import { createCPSE, listCPSE, setCPSEStatus, type CPSEFormPayload } from "@/services/cpse";
+
+const SECTORS = ["Oil & Gas", "Power", "Steel", "Mining", "Heavy Engineering", "Other"];
 
 export default function Cpse() {
   const { user } = useAuth();
@@ -23,8 +24,6 @@ export default function Cpse() {
   const { data, isLoading } = useQuery({ queryKey: ["cpse"], queryFn: listCPSE });
 
   const [dialogOpen, setDialogOpen] = React.useState(false);
-  const [editing, setEditing] = React.useState<CPSEStats | null>(null);
-
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["cpse"] });
 
   const statusMutation = useMutation({
@@ -35,18 +34,13 @@ export default function Cpse() {
   return (
     <div className="space-y-4">
       <PageHeader
-        breadcrumbs={[{ label: "Governance", to: "/cpse" }, { label: "Organizations" }]}
-        title="Organizations"
-        subtitle="Every CPSE onboarded to the platform. Add one and it's usable everywhere immediately."
+        breadcrumbs={[{ label: "CPSE Network", to: "/cpse" }, { label: "Participating CPSEs" }]}
+        title="Participating CPSEs"
+        subtitle="Every Central Public Sector Enterprise onboarded to the National Material Master. Materials only arrive via automatic synchronization - see Data Synchronization."
         actions={
           isAdmin ? (
-            <Button
-              onClick={() => {
-                setEditing(null);
-                setDialogOpen(true);
-              }}
-            >
-              <Plus className="h-4 w-4" /> Add Organization
+            <Button onClick={() => setDialogOpen(true)}>
+              <Plus className="h-4 w-4" /> Add CPSE
             </Button>
           ) : undefined
         }
@@ -55,10 +49,11 @@ export default function Cpse() {
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Organization</TableHead>
-            <TableHead>Material Records</TableHead>
-            <TableHead>Harmonized Records</TableHead>
-            <TableHead>Pending Reviews</TableHead>
+            <TableHead>CPSE</TableHead>
+            <TableHead>Total Materials</TableHead>
+            <TableHead>Common Materials</TableHead>
+            <TableHead>Pending Mappings</TableHead>
+            <TableHead>Sync Status</TableHead>
             <TableHead>Status</TableHead>
             {isAdmin && <TableHead>Actions</TableHead>}
           </TableRow>
@@ -66,15 +61,15 @@ export default function Cpse() {
         <TableBody>
           {isLoading && (
             <TableRow>
-              <TableCell colSpan={isAdmin ? 6 : 5} className="text-center text-slate-400">
+              <TableCell colSpan={isAdmin ? 7 : 6} className="text-center text-slate-400">
                 Loading...
               </TableCell>
             </TableRow>
           )}
           {!isLoading && (data ?? []).length === 0 && (
             <TableRow>
-              <TableCell colSpan={isAdmin ? 6 : 5} className="text-center text-slate-400">
-                No organizations onboarded yet.
+              <TableCell colSpan={isAdmin ? 7 : 6} className="text-center text-slate-400">
+                No CPSEs onboarded yet.
               </TableCell>
             </TableRow>
           )}
@@ -87,33 +82,24 @@ export default function Cpse() {
                 <p className="text-xs text-slate-500">{cpse.name}</p>
               </TableCell>
               <TableCell>{cpse.total_materials}</TableCell>
-              <TableCell>{cpse.harmonized_materials} ({cpse.harmonization_percentage}%)</TableCell>
-              <TableCell>{cpse.pending_approvals}</TableCell>
+              <TableCell>{cpse.common_materials}</TableCell>
+              <TableCell>{cpse.pending_mappings}</TableCell>
+              <TableCell>
+                <StatusBadge status={cpse.synchronization_status} />
+              </TableCell>
               <TableCell>
                 <Badge variant={cpse.is_active ? "success" : "outline"}>{cpse.is_active ? "Active" : "Inactive"}</Badge>
               </TableCell>
               {isAdmin && (
                 <TableCell>
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        setEditing(cpse);
-                        setDialogOpen(true);
-                      }}
-                    >
-                      Edit
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={statusMutation.isPending}
-                      onClick={() => statusMutation.mutate({ id: cpse.id, is_active: !cpse.is_active })}
-                    >
-                      {cpse.is_active ? "Deactivate" : "Activate"}
-                    </Button>
-                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={statusMutation.isPending}
+                    onClick={() => statusMutation.mutate({ id: cpse.id, is_active: !cpse.is_active })}
+                  >
+                    {cpse.is_active ? "Deactivate" : "Activate"}
+                  </Button>
                 </TableCell>
               )}
             </TableRow>
@@ -121,46 +107,20 @@ export default function Cpse() {
         </TableBody>
       </Table>
 
-      <OrganizationDialog
-        open={dialogOpen}
-        onOpenChange={setDialogOpen}
-        editing={editing}
-        onSaved={invalidate}
-      />
+      <CPSEDialog open={dialogOpen} onOpenChange={setDialogOpen} onSaved={invalidate} />
     </div>
   );
 }
 
-function OrganizationDialog({
-  open,
-  onOpenChange,
-  editing,
-  onSaved,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  editing: CPSEStats | null;
-  onSaved: () => void;
-}) {
+function CPSEDialog({ open, onOpenChange, onSaved }: { open: boolean; onOpenChange: (open: boolean) => void; onSaved: () => void }) {
   const [form, setForm] = React.useState<CPSEFormPayload>({});
-  const [logo, setLogo] = React.useState<File | null>(null);
 
   React.useEffect(() => {
-    if (open) {
-      setForm(
-        editing
-          ? { code: editing.code, name: editing.name, sector: editing.sector ?? "", description: editing.description ?? "" }
-          : {}
-      );
-      setLogo(null);
-    }
-  }, [open, editing]);
+    if (open) setForm({});
+  }, [open]);
 
   const mutation = useMutation({
-    mutationFn: () => {
-      const payload = { ...form, logo };
-      return editing ? updateCPSE(editing.id, payload) : createCPSE(payload);
-    },
+    mutationFn: () => createCPSE(form),
     onSuccess: () => {
       onSaved();
       onOpenChange(false);
@@ -171,7 +131,7 @@ function OrganizationDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{editing ? `Edit ${editing.code}` : "Add Organization"}</DialogTitle>
+          <DialogTitle>Add CPSE</DialogTitle>
         </DialogHeader>
         <form
           className="space-y-3"
@@ -182,10 +142,9 @@ function OrganizationDialog({
         >
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label>Organization Code *</Label>
+              <Label>CPSE Code *</Label>
               <Input
                 required
-                disabled={!!editing}
                 value={form.code ?? ""}
                 onChange={(e) => setForm({ ...form, code: e.target.value.toUpperCase() })}
                 placeholder="e.g. GAIL"
@@ -193,39 +152,34 @@ function OrganizationDialog({
             </div>
             <div className="space-y-1.5">
               <Label>Sector</Label>
-              <Input
+              <select
                 value={form.sector ?? ""}
                 onChange={(e) => setForm({ ...form, sector: e.target.value })}
-                placeholder="e.g. Oil & Gas"
-              />
+                className="h-9 w-full rounded border border-slate-300 px-2 text-sm"
+              >
+                <option value="">Select sector</option>
+                {SECTORS.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
           <div className="space-y-1.5">
-            <Label>Organization Name *</Label>
-            <Input
-              required
-              value={form.name ?? ""}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-              placeholder="e.g. GAIL (India) Limited"
-            />
+            <Label>CPSE Name *</Label>
+            <Input required value={form.name ?? ""} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. GAIL (India) Limited" />
           </div>
           <div className="space-y-1.5">
             <Label>Description</Label>
-            <Textarea
-              value={form.description ?? ""}
-              onChange={(e) => setForm({ ...form, description: e.target.value })}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label>Logo (optional)</Label>
-            <Input type="file" accept="image/*" onChange={(e) => setLogo(e.target.files?.[0] ?? null)} />
+            <Input value={form.description ?? ""} onChange={(e) => setForm({ ...form, description: e.target.value })} />
           </div>
 
           {mutation.isError && <p className="text-sm text-danger-600">{apiErrorMessage(mutation.error)}</p>}
 
           <DialogFooter>
             <Button type="submit" disabled={mutation.isPending}>
-              {mutation.isPending ? "Saving..." : editing ? "Save Changes" : "Create Organization"}
+              {mutation.isPending ? "Saving..." : "Create CPSE"}
             </Button>
           </DialogFooter>
         </form>

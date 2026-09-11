@@ -9,7 +9,7 @@ import { Select } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { listAuditLogs } from "@/services/audit";
 
-const ENTITY_TYPES = ["material", "harmonization_request", "approval_request", "common_material_code"];
+const ENTITY_TYPES = ["cpse_material", "common_material", "common_material_mapping", "source_connection"];
 
 export default function AuditLogPage() {
   const [page, setPage] = React.useState(1);
@@ -26,8 +26,8 @@ export default function AuditLogPage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        breadcrumbs={[{ label: "Reports & Monitoring", to: "/audit-log" }, { label: "Audit Log" }]}
-        title="Audit Log"
+        breadcrumbs={[{ label: "Governance", to: "/audit-log" }, { label: "Audit Trail" }]}
+        title="Audit Trail"
         subtitle="Complete, immutable register of every AI decision and human action."
         actions={
           <>

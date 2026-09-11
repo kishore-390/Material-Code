@@ -5,7 +5,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    PROJECT_NAME: str = "One Nation One Common Material Code"
+    PROJECT_NAME: str = "One Nation - One Common Material Code"
 
     DATABASE_URL: str = "postgresql+psycopg://material_admin:postgres@postgres:5432/material_harmonization"
 
@@ -17,13 +17,8 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 480
 
-    UPLOAD_DIR: str = "/app/uploads"
-    MAX_UPLOAD_SIZE_MB: int = 15
-
     TEXT_EMBEDDING_MODEL: str = "sentence-transformers/all-MiniLM-L6-v2"
-    IMAGE_EMBEDDING_MODEL: str = "openai/clip-vit-base-patch32"
     EMBEDDING_DIM: int = 384
-    IMAGE_EMBEDDING_DIM: int = 512
     AI_USE_MOCK_FALLBACK: bool = True
 
     # Optional trained XGBoost material-match classifier. Absent by default -
@@ -37,12 +32,31 @@ class Settings(BaseSettings):
     THRESHOLD_REVIEW: float = 85.0
     THRESHOLD_LOW: float = 60.0
 
-    WEIGHT_DESCRIPTION: float = 0.30
-    WEIGHT_SPECIFICATION: float = 0.25
-    WEIGHT_CATEGORY: float = 0.15
-    WEIGHT_UOM: float = 0.10
-    WEIGHT_IMAGE: float = 0.15
+    # Component weights (spec section 7.5) - must sum to 1.0. "manufacturer"
+    # only applies when at least one side is flagged criticality=CRITICAL
+    # (spec section 6 point 7); otherwise its weight is redistributed - see
+    # app.services.scoring.compute_final_score.
+    WEIGHT_DESCRIPTION: float = 0.20
+    WEIGHT_SPECIFICATION: float = 0.15
+    WEIGHT_CLASSIFICATION: float = 0.10
+    WEIGHT_UOM: float = 0.05
     WEIGHT_ATTRIBUTES: float = 0.05
+    WEIGHT_GRADE: float = 0.15
+    WEIGHT_DIMENSION: float = 0.15
+    WEIGHT_STANDARD: float = 0.05
+    WEIGHT_MANUFACTURER: float = 0.03
+    WEIGHT_FUNCTION: float = 0.05
+    WEIGHT_CRITICALITY: float = 0.02
+
+    # Source connector defaults (spec section 26-27) - per-connection
+    # overrides live on source_connections, never here.
+    SOURCE_SYNC_DEFAULT_PAGE_SIZE: int = 500
+    SOURCE_SYNC_BEAT_TICK_SECONDS: int = 30
+    SOURCE_SYNC_MAX_PAGES_PER_RUN: int = 500
+    # Only used when a caller opts into wait_for_settlement=True (e.g.
+    # app.demo_seed) - how long to block for that batch's automatic
+    # post-sync harmonization pass to finish (see app.connectors.sync_engine).
+    SOURCE_SYNC_SETTLE_TIMEOUT_SECONDS: int = 120
 
     CORS_ORIGINS: str = "http://localhost:5173,http://localhost:3000"
 

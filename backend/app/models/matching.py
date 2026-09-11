@@ -14,23 +14,28 @@ class MaterialMatch(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "material_matches"
 
     material_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("materials.id", ondelete="CASCADE"), nullable=False, index=True
+        UUID(as_uuid=True), ForeignKey("cpse_materials.id", ondelete="CASCADE"), nullable=False, index=True
     )
     candidate_material_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("materials.id", ondelete="CASCADE"), nullable=False, index=True
+        UUID(as_uuid=True), ForeignKey("cpse_materials.id", ondelete="CASCADE"), nullable=False, index=True
     )
 
     final_score: Mapped[float] = mapped_column(Float, nullable=False)
     description_score: Mapped[float] = mapped_column(Float, nullable=False, default=0)
     specification_score: Mapped[float] = mapped_column(Float, nullable=False, default=0)
-    category_score: Mapped[float] = mapped_column(Float, nullable=False, default=0)
+    classification_score: Mapped[float] = mapped_column(Float, nullable=False, default=0)
     uom_score: Mapped[float] = mapped_column(Float, nullable=False, default=0)
-    image_score: Mapped[float] = mapped_column(Float, nullable=False, default=0)
     attribute_score: Mapped[float] = mapped_column(Float, nullable=False, default=0)
+    grade_score: Mapped[float] = mapped_column(Float, nullable=False, default=0)
+    dimension_score: Mapped[float] = mapped_column(Float, nullable=False, default=0)
+    standard_score: Mapped[float] = mapped_column(Float, nullable=False, default=0)
+    manufacturer_score: Mapped[float] = mapped_column(Float, nullable=False, default=0)
+    function_score: Mapped[float] = mapped_column(Float, nullable=False, default=0)
+    criticality_score: Mapped[float] = mapped_column(Float, nullable=False, default=0)
     vector_distance: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
-    material: Mapped["Material"] = relationship(foreign_keys=[material_id])
-    candidate: Mapped["Material"] = relationship(foreign_keys=[candidate_material_id])
+    material: Mapped["CPSEMaterial"] = relationship(foreign_keys=[material_id])
+    candidate: Mapped["CPSEMaterial"] = relationship(foreign_keys=[candidate_material_id])
 
 
 class AIAnalysis(Base, UUIDMixin, TimestampMixin):
@@ -39,19 +44,24 @@ class AIAnalysis(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "ai_analysis"
 
     material_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("materials.id", ondelete="CASCADE"), nullable=False, index=True
+        UUID(as_uuid=True), ForeignKey("cpse_materials.id", ondelete="CASCADE"), nullable=False, index=True
     )
     best_candidate_material_id: Mapped[Optional[uuid.UUID]] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("materials.id"), nullable=True
+        UUID(as_uuid=True), ForeignKey("cpse_materials.id"), nullable=True
     )
 
     final_score: Mapped[float] = mapped_column(Float, nullable=False, default=0)
     description_score: Mapped[float] = mapped_column(Float, nullable=False, default=0)
     specification_score: Mapped[float] = mapped_column(Float, nullable=False, default=0)
-    category_score: Mapped[float] = mapped_column(Float, nullable=False, default=0)
+    classification_score: Mapped[float] = mapped_column(Float, nullable=False, default=0)
     uom_score: Mapped[float] = mapped_column(Float, nullable=False, default=0)
-    image_score: Mapped[float] = mapped_column(Float, nullable=False, default=0)
     attribute_score: Mapped[float] = mapped_column(Float, nullable=False, default=0)
+    grade_score: Mapped[float] = mapped_column(Float, nullable=False, default=0)
+    dimension_score: Mapped[float] = mapped_column(Float, nullable=False, default=0)
+    standard_score: Mapped[float] = mapped_column(Float, nullable=False, default=0)
+    manufacturer_score: Mapped[float] = mapped_column(Float, nullable=False, default=0)
+    function_score: Mapped[float] = mapped_column(Float, nullable=False, default=0)
+    criticality_score: Mapped[float] = mapped_column(Float, nullable=False, default=0)
 
     decision: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
     reason_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -66,5 +76,5 @@ class AIAnalysis(Base, UUIDMixin, TimestampMixin):
     technical_conflict: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     conflict_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
-    material: Mapped["Material"] = relationship(foreign_keys=[material_id])
-    best_candidate: Mapped[Optional["Material"]] = relationship(foreign_keys=[best_candidate_material_id])
+    material: Mapped["CPSEMaterial"] = relationship(foreign_keys=[material_id])
+    best_candidate: Mapped[Optional["CPSEMaterial"]] = relationship(foreign_keys=[best_candidate_material_id])

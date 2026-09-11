@@ -6,7 +6,7 @@ export function GovernmentFooter() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="font-semibold text-slate-700">Government of India</p>
-          <p>CPSE Material Harmonization Platform</p>
+          <p>National Unified Material Master Platform</p>
         </div>
         <nav className="flex flex-wrap gap-x-4 gap-y-1">
           <a href="#" className="hover:text-brand-600 hover:underline">Accessibility</a>

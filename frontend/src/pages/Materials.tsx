@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import * as React from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
 import { OrganizationSelect } from "@/components/OrganizationSelect";
 import { PageHeader } from "@/components/PageHeader";
@@ -12,15 +12,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useDebounce } from "@/hooks/useDebounce";
 import { listMaterials } from "@/services/materials";
 
-const CATEGORIES = [
-  "Pipes", "Valves", "Bearings", "Lubricants", "Flanges", "Motors",
-  "Pumps", "Cables", "Transformers", "Fasteners", "Gaskets", "Industrial Chemicals",
-];
-const STATUSES = ["PENDING", "PROCESSING", "ANALYZED", "HARMONIZED", "REJECTED", "FAILED"];
+const STATUSES = ["PENDING", "PROCESSING", "ANALYZED", "HARMONIZED", "FAILED"];
 
 export default function Materials() {
+  const [searchParams] = useSearchParams();
+  const forcedCpseOnly = searchParams.get("scope") === "cpse";
+
   const [q, setQ] = React.useState("");
-  const [category, setCategory] = React.useState("");
+  const [classification, setClassification] = React.useState("");
   const [status, setStatus] = React.useState("");
   const [cpseId, setCpseId] = React.useState("");
   const [page, setPage] = React.useState(1);
@@ -28,11 +27,11 @@ export default function Materials() {
   const debouncedQ = useDebounce(q);
 
   const { data, isLoading } = useQuery({
-    queryKey: ["materials", { q: debouncedQ, category, status, cpseId, page }],
+    queryKey: ["materials", { q: debouncedQ, classification, status, cpseId, page }],
     queryFn: () =>
       listMaterials({
         q: debouncedQ || undefined,
-        category: category || undefined,
+        classification: classification || undefined,
         status: status || undefined,
         cpse_id: cpseId || undefined,
         page,
@@ -45,9 +44,9 @@ export default function Materials() {
   return (
     <div className="space-y-4">
       <PageHeader
-        breadcrumbs={[{ label: "Material Management", to: "/materials" }, { label: "Materials" }]}
-        title="Materials"
-        subtitle={`${data?.total ?? 0} materials in the catalogue`}
+        breadcrumbs={[{ label: "Material Master" }, { label: forcedCpseOnly ? "CPSE Materials" : "All Materials" }]}
+        title={forcedCpseOnly ? "CPSE Materials" : "All Materials"}
+        subtitle={`${data?.total ?? 0} materials synchronized from participating CPSE source systems`}
       />
 
       <div className="flex flex-wrap gap-3">
@@ -69,21 +68,15 @@ export default function Materials() {
           }}
           className="max-w-[220px]"
         />
-        <Select
-          value={category}
+        <Input
+          placeholder="Classification..."
+          value={classification}
           onChange={(e) => {
-            setCategory(e.target.value);
+            setClassification(e.target.value);
             setPage(1);
           }}
           className="max-w-[180px]"
-        >
-          <option value="">All Categories</option>
-          {CATEGORIES.map((c) => (
-            <option key={c} value={c}>
-              {c}
-            </option>
-          ))}
-        </Select>
+        />
         <Select
           value={status}
           onChange={(e) => {
@@ -105,27 +98,26 @@ export default function Materials() {
         <TableHeader>
           <TableRow>
             <TableHead className="w-12">Sl.No.</TableHead>
-            <TableHead>Material Code</TableHead>
+            <TableHead>Original Material Code</TableHead>
             <TableHead>Description</TableHead>
-            <TableHead>Category</TableHead>
+            <TableHead>Classification</TableHead>
             <TableHead>UOM</TableHead>
             <TableHead>CPSE</TableHead>
-            <TableHead>Common Code</TableHead>
             <TableHead>Status</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {isLoading && (
             <TableRow>
-              <TableCell colSpan={8} className="text-center text-slate-400">
+              <TableCell colSpan={7} className="text-center text-slate-400">
                 Loading...
               </TableCell>
             </TableRow>
           )}
           {!isLoading && (data?.items.length ?? 0) === 0 && (
             <TableRow>
-              <TableCell colSpan={8} className="text-center text-slate-400">
-                No materials found.
+              <TableCell colSpan={7} className="text-center text-slate-400">
+                No materials found. Materials only appear here once a CPSE's data has been synchronized.
               </TableCell>
             </TableRow>
           )}
@@ -134,22 +126,13 @@ export default function Materials() {
               <TableCell className="text-slate-400">{(page - 1) * pageSize + idx + 1}</TableCell>
               <TableCell>
                 <Link to={`/materials/${material.id}`} className="font-medium text-brand-600 hover:underline">
-                  {material.material_code}
+                  {material.original_material_code}
                 </Link>
               </TableCell>
-              <TableCell className="max-w-xs truncate">{material.description}</TableCell>
-              <TableCell>{material.category}</TableCell>
+              <TableCell className="max-w-xs truncate">{material.original_description}</TableCell>
+              <TableCell>{material.classification}</TableCell>
               <TableCell>{material.uom}</TableCell>
               <TableCell>{material.cpse.code}</TableCell>
-              <TableCell>
-                {material.common_code ? (
-                  <Link to={`/common-material-master/${material.common_code.code}`} className="text-brand-600 hover:underline">
-                    {material.common_code.code}
-                  </Link>
-                ) : (
-                  <span className="text-slate-400">—</span>
-                )}
-              </TableCell>
               <TableCell>
                 <StatusBadge status={material.status} />
               </TableCell>

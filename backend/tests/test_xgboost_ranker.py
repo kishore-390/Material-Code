@@ -1,170 +1,87 @@
-import os
-import uuid
-
+"""
+XGBoost ranker tests (spec section 49 - "if a trained model does not yet
+exist, implement a clean model interface and a deterministic development
+fallback rather than pretending a fake trained model exists"). No trained
+model is committed to the repo (see app/ml/train_xgb_ranker.py for how one
+would be produced from real synced+approved data), so these tests exercise
+the FALLBACK path plus the blend-gating logic using a stubbed-in fake model
+- never a real trained artifact pretending to be one.
+"""
 import app.ai.ml_ranker as ml_ranker
-from app.ai.analyzer import analyze_material
 from app.core.config import settings
+from app.services.scoring import ScoreBreakdown
 
 
-def _register_and_login(client, username, role_name, cpse_code=None):
-    payload = {
-        "username": username,
-        "email": f"{username}@example.com",
-        "full_name": username.title(),
-        "password": "Password@1",
-        "role_name": role_name,
-    }
-    if cpse_code:
-        payload["cpse_code"] = cpse_code
-    client.post("/api/auth/register", json=payload)
-    login = client.post("/api/auth/login", json={"username": username, "password": "Password@1"})
-    token = login.json()["access_token"]
-    return {"Authorization": f"Bearer {token}"}
-
-
-def _create_ongc_org(client, admin_headers):
-    client.post("/api/cpse", data={"code": "ONGC", "name": "Oil and Natural Gas Corporation"}, headers=admin_headers)
-
-
-def _create_material(client, admin_headers, *, code, description, category, uom, cpse_code, specification=None, material_type=None):
-    resp = client.post(
-        "/api/materials",
-        data={
-            "material_code": code,
-            "description": description,
-            "specification": specification or "",
-            "category": category,
-            "uom": uom,
-            "cpse_code": cpse_code,
-            "material_type": material_type or "",
-        },
-        headers=admin_headers,
+def _breakdown(**overrides) -> ScoreBreakdown:
+    base = dict(
+        final_score=80, description_score=80, specification_score=80, classification_score=80,
+        uom_score=80, attribute_score=80, grade_score=80, dimension_score=80, standard_score=80,
+        manufacturer_score=80, function_score=80, criticality_score=80,
     )
-    assert resp.status_code == 201, resp.text
-    return resp.json()
+    base.update(overrides)
+    return ScoreBreakdown(**base)
 
 
-def test_trained_model_loads_successfully():
-    """Requires app/ml_models/material_match_xgb.json to exist - produced by
-    `python -m app.ml.train_xgb_ranker` (see that module's docstring)."""
-    assert os.path.exists(settings.XGB_MODEL_PATH), (
-        "No trained model found. Run: docker compose exec backend python -m app.ml.train_xgb_ranker"
-    )
+def test_no_committed_model_falls_back_safely():
     ml_ranker.reset_model_cache()
-    result = ml_ranker.score_with_ml(
-        {"description_score": 90, "specification_score": 90, "category_score": 100, "uom_score": 100, "attribute_score": 90, "image_score": 0}
-    )
-    assert result.status == "TRAINED"
-    assert result.available is True
-    assert result.score is not None
-
-
-def test_equivalent_valve_pair_gets_high_xgboost_probability(client, db_session, seed_roles_and_cpse):
-    """
-    Same regression case as before (a genuinely equivalent CS Gate Valve
-    pair, worded differently by each CPSE) but exercised through the
-    surviving pipeline: create both materials directly (no demo source
-    database), then run the real analyze_material() full-pool pipeline
-    (SBERT embeddings -> pgvector candidate retrieval -> scoring ->
-    XGBoost blend -> decision engine) exactly as the full-database scan
-    does for every material.
-    """
-    admin_headers = _register_and_login(client, "xgb_valve_admin", "ADMIN")
-    _create_ongc_org(client, admin_headers)
-
-    iocl = _create_material(
-        client, admin_headers, code="IOCL-1002", description="Carbon Steel Gate Valve",
-        specification="API 600 Class 150", category="Valves", uom="Nos", cpse_code="IOCL",
-    )
-    ongc = _create_material(
-        client, admin_headers, code="ONGC-2002", description="CS Gate Valve",
-        specification="API 600 Class 150", category="Valve", uom="Nos", cpse_code="ONGC",
-    )
-
-    # analyze_material()'s candidate search only matches materials that
-    # already have a stored embedding (see app.ai.similarity.find_candidate_materials)
-    # - exactly like the real full-database-scan queue, the candidate must be
-    # analyzed first so it becomes findable when the primary material is analyzed.
-    analyze_material(db_session, uuid.UUID(ongc["id"]))
-    analyze_material(db_session, uuid.UUID(iocl["id"]))
-
-    response = client.get(f"/api/ai/analysis/{iocl['id']}", headers=admin_headers)
-    assert response.status_code == 200
-    body = response.json()
-    assert body["ml_status"] == "TRAINED"
-    assert body["ml_probability"] is not None
-    assert body["ml_probability"] > 70
-    assert body["decision"] == "AUTO_HARMONIZATION"
-    assert body["recommended_common_code"] is not None
-
-
-def test_pipe_vs_drill_bit_gets_low_probability_and_is_rejected(client, db_session, seed_roles_and_cpse):
-    admin_headers = _register_and_login(client, "xgb_reject_admin", "ADMIN")
-    _create_ongc_org(client, admin_headers)
-
-    iocl = _create_material(
-        client, admin_headers, code="IOCL-1001", description="Carbon Steel Seamless Pipe",
-        specification="ASTM A106 Grade B", category="Pipes", uom="M", cpse_code="IOCL",
-    )
-    ongc = _create_material(
-        client, admin_headers, code="ONGC-2011", description="Drill Bit Tricone Type",
-        specification="Tricone Roller Cone Bit", category="Drilling Equipment", uom="Nos", cpse_code="ONGC",
-    )
-
-    analyze_material(db_session, uuid.UUID(ongc["id"]))
-    analyze_material(db_session, uuid.UUID(iocl["id"]))
-
-    response = client.get(f"/api/ai/analysis/{iocl['id']}", headers=admin_headers)
-    assert response.status_code == 200
-    body = response.json()
-    assert body["ml_probability"] is None or body["ml_probability"] < 30
-    assert body["decision"] in ("LOW_CONFIDENCE", "NO_COMMON_CODE")
-    assert body["recommended_common_code"] is None
-
-
-def test_xgboost_does_not_override_category_incompatible_safety_gate(client, db_session, seed_roles_and_cpse):
-    """Even where XGBoost itself is confident (category-mismatched pump pair
-    genuinely scores high on description/spec), the category-incompatibility
-    safety floor must keep it out of the blended score - final_score must
-    equal the pure rule-based score, not a blend, whenever category_score is
-    below XGB_SAFETY_CATEGORY_FLOOR."""
-    admin_headers = _register_and_login(client, "xgb_gate_admin", "ADMIN")
-    _create_ongc_org(client, admin_headers)
-
-    iocl = _create_material(
-        client, admin_headers, code="IOCL-1003", description="Industrial Centrifugal Pump",
-        specification="API 610", category="Pumps", uom="Nos", cpse_code="IOCL",
-    )
-    ongc = _create_material(
-        client, admin_headers, code="ONGC-2003", description="Centrifugal Pump for Industrial Water Service",
-        specification="API 610", category="Rotating Equipment", uom="Nos", cpse_code="ONGC",
-    )
-
-    analyze_material(db_session, uuid.UUID(ongc["id"]))
-    analyze_material(db_session, uuid.UUID(iocl["id"]))
-
-    response = client.get(f"/api/ai/analysis/{iocl['id']}", headers=admin_headers)
-    assert response.status_code == 200
-    body = response.json()
-    if body["category_score"] < ml_ranker.XGB_SAFETY_CATEGORY_FLOOR:
-        # overall_score must NOT have moved toward xgboost_probability when the gate is closed.
-        assert body["ml_probability"] is None or abs(body["final_score"] - body["ml_probability"]) > 5
-
-
-def test_missing_model_falls_back_safely(monkeypatch):
-    monkeypatch.setattr(settings, "XGB_MODEL_PATH", "/tmp/does-not-exist-xgb-model.json")
-    ml_ranker.reset_model_cache()
-    result = ml_ranker.score_with_ml(
-        {"description_score": 90, "specification_score": 90, "category_score": 100, "uom_score": 100, "attribute_score": 90, "image_score": 0}
-    )
+    result = ml_ranker.score_with_ml(ml_ranker.extract_features(_breakdown()))
     assert result.status == "FALLBACK"
     assert result.available is False
     assert result.score is None
-    ml_ranker.reset_model_cache()  # restore for subsequent tests
+
+
+def test_missing_model_path_falls_back_safely(monkeypatch):
+    monkeypatch.setattr(settings, "XGB_MODEL_PATH", "/tmp/does-not-exist-xgb-model.json")
+    ml_ranker.reset_model_cache()
+    result = ml_ranker.score_with_ml(ml_ranker.extract_features(_breakdown()))
+    assert result.status == "FALLBACK"
+    ml_ranker.reset_model_cache()
+
+
+def test_blend_scores_returns_untouched_breakdown_without_a_model():
+    ml_ranker.reset_model_cache()
+    breakdown = _breakdown(final_score=80)
+    blended, ml_result = ml_ranker.blend_scores(breakdown)
+    assert blended.final_score == 80
+    assert ml_result.status == "FALLBACK"
+
+
+def test_blend_scores_gated_below_classification_safety_floor(monkeypatch):
+    """Even a stubbed-in confident model must be ignored entirely when the
+    rule-based classification score signals different material families."""
+
+    class _FakeModel:
+        def predict_proba(self, rows):
+            return [[0.05, 0.95]]  # very confident "match"
+
+    monkeypatch.setattr(ml_ranker, "_load_model", lambda: _FakeModel())
+    ml_ranker._load_attempted = True
+    ml_ranker._model = _FakeModel()
+
+    breakdown = _breakdown(final_score=40, classification_score=10)  # below XGB_SAFETY_CLASSIFICATION_FLOOR
+    blended, ml_result = ml_ranker.blend_scores(breakdown)
+    assert ml_result.available is True
+    assert blended.final_score == 40  # unchanged - the model's opinion was discarded
+    ml_ranker.reset_model_cache()
+
+
+def test_blend_scores_applies_above_classification_safety_floor(monkeypatch):
+    class _FakeModel:
+        def predict_proba(self, rows):
+            return [[0.0, 1.0]]  # probability 100
+
+    ml_ranker._load_attempted = True
+    ml_ranker._model = _FakeModel()
+
+    breakdown = _breakdown(final_score=60, classification_score=90)  # above the floor
+    blended, ml_result = ml_ranker.blend_scores(breakdown)
+    assert ml_result.available is True
+    assert blended.final_score == 80  # 0.5*60 + 0.5*100
+    ml_ranker.reset_model_cache()
 
 
 def test_feature_order_never_includes_material_codes():
     assert "material_code" not in ml_ranker.FEATURE_ORDER
-    assert "source_material_code" not in ml_ranker.FEATURE_ORDER
+    assert "original_material_code" not in ml_ranker.FEATURE_ORDER
     for name in ml_ranker.FEATURE_ORDER:
         assert "code" not in name.lower()

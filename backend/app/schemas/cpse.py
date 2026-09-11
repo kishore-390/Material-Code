@@ -30,6 +30,8 @@ class CPSEOut(BaseModel):
     description: Optional[str] = None
     logo_url: Optional[str] = None
     is_active: bool
+    last_sync_at: Optional[datetime] = None
+    synchronization_status: str
     created_at: datetime
 
     class Config:
@@ -38,8 +40,10 @@ class CPSEOut(BaseModel):
 
 class CPSEStats(CPSEOut):
     total_materials: int = 0
-    harmonized_materials: int = 0
-    pending_approvals: int = 0
-    common_codes: int = 0
-    duplicate_materials: int = 0
-    harmonization_percentage: float = 0.0
+    common_materials: int = 0
+    unique_materials: int = 0
+    duplicates: int = 0
+    near_duplicates: int = 0
+    functional_equivalents: int = 0
+    pending_mappings: int = 0
+    legacy_codes: int = 0

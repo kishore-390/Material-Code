@@ -2,7 +2,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as React from "react";
 
 import { PageHeader } from "@/components/PageHeader";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -13,28 +12,30 @@ import { getSettings, updateSettings } from "@/services/settings";
 import type { SystemSettings } from "@/types";
 
 const THRESHOLD_FIELDS: { key: keyof SystemSettings; label: string }[] = [
-  { key: "threshold_auto", label: "Auto Harmonization Threshold (%)" },
-  { key: "threshold_review", label: "Human Review Threshold (%)" },
+  { key: "threshold_auto", label: "Auto Threshold (%)" },
+  { key: "threshold_review", label: "Review Threshold (%)" },
   { key: "threshold_low", label: "Low Confidence Threshold (%)" },
 ];
 
 const WEIGHT_FIELDS: { key: keyof SystemSettings; label: string }[] = [
-  { key: "weight_description", label: "Description Weight" },
-  { key: "weight_specification", label: "Specification Weight" },
-  { key: "weight_category", label: "Category Weight" },
-  { key: "weight_uom", label: "UOM Weight" },
-  { key: "weight_image", label: "Image Weight" },
-  { key: "weight_attributes", label: "Attributes Weight" },
+  { key: "weight_description", label: "Description" },
+  { key: "weight_specification", label: "Specification" },
+  { key: "weight_classification", label: "Classification" },
+  { key: "weight_uom", label: "UOM" },
+  { key: "weight_attributes", label: "Attributes" },
+  { key: "weight_grade", label: "Grade" },
+  { key: "weight_dimension", label: "Dimension" },
+  { key: "weight_standard", label: "Standard" },
+  { key: "weight_manufacturer", label: "Manufacturer (when critical)" },
+  { key: "weight_function", label: "Function" },
+  { key: "weight_criticality", label: "Criticality" },
 ];
-
-const AUTO_MAP_STORAGE_KEY = "app-auto-map-policy";
 
 export default function Settings() {
   const queryClient = useQueryClient();
   const { data } = useQuery({ queryKey: ["settings"], queryFn: getSettings });
   const [form, setForm] = React.useState<SystemSettings | null>(null);
   const { decreaseFont, resetFont, increaseFont, language, setLanguage } = useAccessibilitySettings();
-  const [autoMapPolicy, setAutoMapPolicy] = React.useState(() => localStorage.getItem(AUTO_MAP_STORAGE_KEY) !== "false");
 
   React.useEffect(() => {
     if (data && !form) setForm(data);
@@ -48,12 +49,6 @@ export default function Settings() {
     },
   });
 
-  function toggleAutoMapPolicy() {
-    const next = !autoMapPolicy;
-    setAutoMapPolicy(next);
-    localStorage.setItem(AUTO_MAP_STORAGE_KEY, String(next));
-  }
-
   if (!form) return <p className="text-sm text-slate-400">Loading...</p>;
 
   const weightSum = WEIGHT_FIELDS.reduce((sum, f) => sum + Number(form[f.key] ?? 0), 0);
@@ -61,9 +56,9 @@ export default function Settings() {
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <PageHeader
-        breadcrumbs={[{ label: "System", to: "/settings" }, { label: "Settings" }]}
-        title="Admin Settings"
-        subtitle="Configure the decision thresholds and scoring weights used by the AI matching engine, plus accessibility and display preferences."
+        breadcrumbs={[{ label: "Governance" }, { label: "Rules & Policies" }]}
+        title="Rules & Policies"
+        subtitle="Decision thresholds and scoring weights used by the AI harmonization engine, plus accessibility preferences."
       />
 
       <Card>
@@ -96,9 +91,6 @@ export default function Settings() {
               </button>
             </div>
           </div>
-          <p className="text-xs text-slate-400">
-            These preferences are saved locally to this browser and mirror the controls in the top header.
-          </p>
         </CardContent>
       </Card>
 
@@ -110,12 +102,7 @@ export default function Settings() {
           {THRESHOLD_FIELDS.map((f) => (
             <div key={f.key} className="space-y-1.5">
               <Label>{f.label}</Label>
-              <Input
-                type="number"
-                step="0.1"
-                value={form[f.key]}
-                onChange={(e) => setForm({ ...form, [f.key]: Number(e.target.value) })}
-              />
+              <Input type="number" step="0.1" value={form[f.key]} onChange={(e) => setForm({ ...form, [f.key]: Number(e.target.value) })} />
             </div>
           ))}
         </CardContent>
@@ -130,42 +117,14 @@ export default function Settings() {
             {WEIGHT_FIELDS.map((f) => (
               <div key={f.key} className="space-y-1.5">
                 <Label>{f.label}</Label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  value={form[f.key]}
-                  onChange={(e) => setForm({ ...form, [f.key]: Number(e.target.value) })}
-                />
+                <Input type="number" step="0.01" value={form[f.key]} onChange={(e) => setForm({ ...form, [f.key]: Number(e.target.value) })} />
               </div>
             ))}
           </div>
           <p className={`mt-3 text-xs ${Math.abs(weightSum - 1) < 0.01 ? "text-success-600" : "text-warning-600"}`}>
-            Weights sum to {weightSum.toFixed(2)} (should equal 1.00)
+            Weights sum to {weightSum.toFixed(2)} (should equal 1.00). Manufacturer only applies when a material is
+            flagged criticality=CRITICAL.
           </p>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Auto-Mapping Policy</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-slate-700">Allow AI to auto-map at or above the Auto Harmonization Threshold</p>
-              <p className="text-xs text-slate-500">
-                Currently a display preference only — it does not change the decision engine's behavior
-                (that is always governed by the Decision Thresholds above).
-              </p>
-            </div>
-            <button
-              onClick={toggleAutoMapPolicy}
-              className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${autoMapPolicy ? "bg-brand-600" : "bg-slate-300"}`}
-            >
-              <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-transform ${autoMapPolicy ? "translate-x-5" : "translate-x-0.5"}`} />
-            </button>
-          </div>
-          <Badge variant="outline">UI Preference Only — Not Wired to Backend Enforcement</Badge>
         </CardContent>
       </Card>
 

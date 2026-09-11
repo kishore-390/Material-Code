@@ -8,10 +8,15 @@ DEFAULTS = {
     "threshold_low": settings.THRESHOLD_LOW,
     "weight_description": settings.WEIGHT_DESCRIPTION,
     "weight_specification": settings.WEIGHT_SPECIFICATION,
-    "weight_category": settings.WEIGHT_CATEGORY,
+    "weight_classification": settings.WEIGHT_CLASSIFICATION,
     "weight_uom": settings.WEIGHT_UOM,
-    "weight_image": settings.WEIGHT_IMAGE,
     "weight_attributes": settings.WEIGHT_ATTRIBUTES,
+    "weight_grade": settings.WEIGHT_GRADE,
+    "weight_dimension": settings.WEIGHT_DIMENSION,
+    "weight_standard": settings.WEIGHT_STANDARD,
+    "weight_manufacturer": settings.WEIGHT_MANUFACTURER,
+    "weight_function": settings.WEIGHT_FUNCTION,
+    "weight_criticality": settings.WEIGHT_CRITICALITY,
 }
 
 
@@ -45,10 +50,15 @@ def get_effective_weights() -> dict:
     return {
         "description": values["weight_description"],
         "specification": values["weight_specification"],
-        "category": values["weight_category"],
+        "classification": values["weight_classification"],
         "uom": values["weight_uom"],
-        "image": values["weight_image"],
         "attributes": values["weight_attributes"],
+        "grade": values["weight_grade"],
+        "dimension": values["weight_dimension"],
+        "standard": values["weight_standard"],
+        "manufacturer": values["weight_manufacturer"],
+        "function": values["weight_function"],
+        "criticality": values["weight_criticality"],
     }
 
 

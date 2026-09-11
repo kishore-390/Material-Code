@@ -27,12 +27,6 @@ api.interceptors.response.use(
   }
 );
 
-export function resolveImageUrl(path?: string | null): string | undefined {
-  if (!path) return undefined;
-  if (path.startsWith("http")) return path;
-  return `${API_HOST}${path}`;
-}
-
 export function apiErrorMessage(error: unknown, fallback = "Something went wrong"): string {
   if (axios.isAxiosError(error)) {
     const detail = error.response?.data?.detail;

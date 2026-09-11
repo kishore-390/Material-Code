@@ -12,6 +12,11 @@ class AuditLogOut(BaseModel):
     action: str
     entity_type: str
     entity_id: Optional[uuid.UUID] = None
+    before_state: Optional[dict] = None
+    after_state: Optional[dict] = None
+    reason: Optional[str] = None
+    ai_model_version: Optional[str] = None
+    confidence: Optional[float] = None
     details: Optional[dict] = None
     created_at: datetime
 

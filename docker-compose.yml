@@ -42,7 +42,6 @@ services:
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://material_admin:postgres@postgres:5432/material_harmonization}
     volumes:
       - ./backend/app:/app/app
-      - ./uploads:/app/uploads
     ports:
       - "8000:8000"
     depends_on:
@@ -65,7 +64,6 @@ services:
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://material_admin:postgres@postgres:5432/material_harmonization}
     volumes:
       - ./backend/app:/app/app
-      - ./uploads:/app/uploads
     depends_on:
       postgres:
         condition: service_healthy
@@ -74,6 +72,26 @@ services:
       backend:
         condition: service_started
     command: celery -A app.workers.celery_app worker --loglevel=info --concurrency=2
+
+  beat:
+    build:
+      context: ./backend
+    container_name: mh_beat
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://material_admin:postgres@postgres:5432/material_harmonization}
+    volumes:
+      - ./backend/app:/app/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_started
+    command: celery -A app.workers.celery_app beat --loglevel=info
 
   frontend:
     build:

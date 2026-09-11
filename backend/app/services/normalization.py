@@ -149,8 +149,8 @@ def normalize_uom(uom: str | None) -> str:
     return UOM_MAP.get(cleaned, cleaned)
 
 
-def normalize_category(category: str | None) -> str:
-    cleaned = basic_clean(category)
+def normalize_classification(classification: str | None) -> str:
+    cleaned = basic_clean(classification)
     cleaned = _expand_abbreviations(cleaned)
     if cleaned in CATEGORY_SYNONYM_PHRASES:
         return CATEGORY_SYNONYM_PHRASES[cleaned]

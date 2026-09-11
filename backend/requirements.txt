@@ -9,17 +9,29 @@ pydantic-settings==2.5.2
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
 bcrypt==4.2.0
-python-multipart==0.0.12
 celery==5.4.0
 redis==5.1.1
-pandas==2.2.3
-openpyxl==3.1.5
 numpy==1.26.4
 scikit-learn==1.5.2
-Pillow==10.4.0
 pytest==8.3.3
 httpx==0.27.2
 sentence-transformers==3.1.1
-python-slugify==8.0.4
-faiss-cpu==1.9.0
 xgboost==2.1.1
+
+# Required by FastAPI/Starlette to parse multipart/form-data request bodies -
+# needed only for the demo-only CSV import file upload endpoint
+# (app.api.endpoints.demo_import). Not the old bulk-upload/ERP dependency set
+# removed in the rebuild; this is a Starlette-level parsing requirement.
+python-multipart==0.0.12
+
+# Source connector drivers (spec section 26) - PostgreSQL uses psycopg
+# above; MySQL uses the pure-Python driver below, no system dependency.
+pymysql==1.1.1
+
+# Oracle/SQL Server connectors (app.connectors.oracle_connector /
+# mssql_connector) are interface-complete but intentionally NOT installed by
+# default - they require optional vendor drivers/system libraries
+# (oracledb, pyodbc + Microsoft ODBC Driver). Install them only if actually
+# connecting to an Oracle/SQL Server CPSE source:
+#   pip install oracledb
+#   pip install pyodbc  (+ the Microsoft ODBC Driver for SQL Server)

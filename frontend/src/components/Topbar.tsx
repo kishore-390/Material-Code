@@ -9,13 +9,13 @@ import { listNotifications } from "@/services/notifications";
 
 const SITEMAP_LINKS = [
   { to: "/dashboard", label: "Dashboard" },
-  { to: "/materials", label: "Materials" },
-  { to: "/harmonization", label: "AI Harmonization" },
-  { to: "/approvals", label: "Approval Center" },
-  { to: "/common-material-master", label: "Common Material Master" },
-  { to: "/cpse", label: "Organizations" },
-  { to: "/analytics", label: "Analytics" },
-  { to: "/audit-log", label: "Audit Log" },
+  { to: "/materials", label: "All Materials" },
+  { to: "/cpse", label: "Participating CPSEs" },
+  { to: "/synchronization", label: "Data Synchronization" },
+  { to: "/common-material-master", label: "Common Materials" },
+  { to: "/approvals/pending", label: "Pending Validation" },
+  { to: "/legacy-codes", label: "Legacy Codes" },
+  { to: "/audit-log", label: "Audit Trail" },
   { to: "/settings", label: "Settings" },
 ];
 
@@ -87,10 +87,10 @@ export function Topbar() {
               Government of India
             </p>
             <p className="text-sm font-bold uppercase leading-tight tracking-wide text-navy-900">
-              CPSE Material Harmonization
+              National Unified Material Master
             </p>
             <p className="text-[11px] leading-tight text-slate-400">
-              AI-Powered CPSE Material Harmonization Platform
+              AI-Powered National Unified Material Master Platform
             </p>
           </div>
         </div>

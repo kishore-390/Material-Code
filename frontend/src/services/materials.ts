@@ -1,27 +1,32 @@
 import { api } from "@/services/api";
-import type { MaterialDetail, MaterialListResponse, SimilarMaterialItem } from "@/types";
+import type { CPSEMaterial, CPSEMaterialDetail, MaterialListResponse } from "@/types";
 
 export interface MaterialListParams {
   cpse_id?: string;
-  category?: string;
+  classification?: string;
   status?: string;
-  common_code?: string;
+  mapped_only?: boolean;
   q?: string;
   page?: number;
   page_size?: number;
 }
 
 export async function listMaterials(params: MaterialListParams = {}) {
-  const { data } = await api.get<MaterialListResponse>("/materials", { params });
+  const { data } = await api.get<MaterialListResponse>("/cpse-materials", { params });
   return data;
 }
 
 export async function getMaterial(id: string) {
-  const { data } = await api.get<MaterialDetail>(`/materials/${id}`);
+  const { data } = await api.get<CPSEMaterialDetail>(`/cpse-materials/${id}`);
+  return data;
+}
+
+export async function searchMaterials(q: string) {
+  const { data } = await api.get<CPSEMaterial[]>("/cpse-materials/search", { params: { q } });
   return data;
 }
 
 export async function findSimilarMaterials(materialId: string) {
-  const { data } = await api.get<SimilarMaterialItem[]>(`/materials/${materialId}/similar`);
+  const { data } = await api.get<CPSEMaterial[]>(`/cpse-materials/${materialId}/similar`);
   return data;
 }

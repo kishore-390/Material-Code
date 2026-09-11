@@ -4,8 +4,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user
 from app.core.security import create_access_token, hash_password, verify_password
 from app.db.session import get_db
-from app.models.cpse import CPSEOrganization
-from app.models.enums import RoleName
+from app.models.cpse import CPSE
 from app.models.user import Role, User
 from app.schemas.user import LoginRequest, TokenResponse, UserCreate, UserOut
 
@@ -25,11 +24,9 @@ def register(payload: UserCreate, db: Session = Depends(get_db)):
 
     cpse = None
     if payload.cpse_code:
-        cpse = db.query(CPSEOrganization).filter(CPSEOrganization.code == payload.cpse_code.upper()).first()
+        cpse = db.query(CPSE).filter(CPSE.code == payload.cpse_code.upper()).first()
         if not cpse:
             raise HTTPException(status_code=400, detail=f"Unknown CPSE '{payload.cpse_code}'")
-    elif role.name == RoleName.CPSE_USER.value:
-        raise HTTPException(status_code=400, detail="CPSE_USER accounts must specify a cpse_code")
 
     user = User(
         username=payload.username,

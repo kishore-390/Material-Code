@@ -1,81 +1,64 @@
 import { useQuery } from "@tanstack/react-query";
-import * as React from "react";
 
-import { ConfidenceDistributionChart } from "@/charts/ConfidenceDistributionChart";
-import { MonthlyTrendChart } from "@/charts/MonthlyTrendChart";
 import { SimpleBarChart } from "@/charts/SimpleBarChart";
-import { OrganizationSelect } from "@/components/OrganizationSelect";
 import { PageHeader } from "@/components/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getTrends } from "@/services/dashboard";
+import { getClassificationDistribution, getCommonCodeAdoption, getCpseComparison, getHarmonizationTrends, getMaterialQuality } from "@/services/analytics";
 
 export default function Analytics() {
-  const [cpseId, setCpseId] = React.useState("");
-  const { data: trends } = useQuery({
-    queryKey: ["dashboard", "trends", cpseId],
-    queryFn: () => getTrends(cpseId),
-  });
+  const { data: classification } = useQuery({ queryKey: ["analytics", "classification"], queryFn: getClassificationDistribution });
+  const { data: cpseComparison } = useQuery({ queryKey: ["analytics", "cpse-comparison"], queryFn: getCpseComparison });
+  const { data: adoption } = useQuery({ queryKey: ["analytics", "common-code-adoption"], queryFn: getCommonCodeAdoption });
+  const { data: quality } = useQuery({ queryKey: ["analytics", "material-quality"], queryFn: getMaterialQuality });
+  const { data: trends } = useQuery({ queryKey: ["analytics", "harmonization-trends"], queryFn: getHarmonizationTrends });
 
   return (
     <div className="space-y-6">
       <PageHeader
-        breadcrumbs={[{ label: "Reports & Monitoring", to: "/analytics" }, { label: "Analytics" }]}
-        title="Analytics"
-        subtitle="Deeper insight into harmonization performance and savings."
-        actions={<OrganizationSelect includeAllOption value={cpseId} onChange={(e) => setCpseId(e.target.value)} className="max-w-[220px]" />}
+        breadcrumbs={[{ label: "Analytics" }, { label: "Material Master Analytics" }]}
+        title="Material Master Analytics"
+        subtitle="Deeper insight into harmonization performance across the National Material Master."
       />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>AI Confidence Distribution</CardTitle>
+            <CardTitle>CPSE Comparison</CardTitle>
           </CardHeader>
           <CardContent>
-            <ConfidenceDistributionChart data={trends?.confidence_distribution ?? []} />
+            <SimpleBarChart data={cpseComparison ?? []} />
           </CardContent>
         </Card>
         <Card>
           <CardHeader>
-            <CardTitle>Material Harmonization Trend</CardTitle>
+            <CardTitle>Classification Distribution</CardTitle>
           </CardHeader>
           <CardContent>
-            <MonthlyTrendChart data={trends?.monthly_trend ?? []} />
+            <SimpleBarChart data={classification ?? []} color="#4a3aa7" />
           </CardContent>
         </Card>
         <Card>
           <CardHeader>
-            <CardTitle>CPSE-wise Material Distribution</CardTitle>
+            <CardTitle>Common Code Adoption (by decision status)</CardTitle>
           </CardHeader>
           <CardContent>
-            <SimpleBarChart data={trends?.materials_by_cpse ?? []} />
+            <SimpleBarChart data={adoption ?? []} color="#138808" />
           </CardContent>
         </Card>
         <Card>
           <CardHeader>
-            <CardTitle>Harmonized Materials by CPSE</CardTitle>
+            <CardTitle>Material Quality</CardTitle>
           </CardHeader>
           <CardContent>
-            <SimpleBarChart data={trends?.harmonized_by_cpse ?? []} color="#138808" />
+            <SimpleBarChart data={quality ?? []} color="#eb6834" />
           </CardContent>
         </Card>
-        <Card>
+        <Card className="lg:col-span-2">
           <CardHeader>
-            <CardTitle>Duplicate Reduction Trend (by category)</CardTitle>
+            <CardTitle>Harmonization Trend (mappings created per month)</CardTitle>
           </CardHeader>
           <CardContent>
-            <SimpleBarChart data={trends?.duplicate_reduction ?? []} color="#4a3aa7" />
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Estimated Procurement Savings (₹, by category)</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <SimpleBarChart
-              data={trends?.estimated_savings ?? []}
-              color="#eb6834"
-              valueFormatter={(v) => `₹${(v / 1000).toFixed(0)}k`}
-            />
+            <SimpleBarChart data={trends ?? []} />
           </CardContent>
         </Card>
       </div>

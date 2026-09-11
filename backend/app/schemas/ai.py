@@ -4,18 +4,23 @@ from typing import Optional
 
 from pydantic import BaseModel
 
-from app.schemas.material import MaterialOut
+from app.schemas.material import CPSEMaterialOut
 
 
 class CandidateOut(BaseModel):
-    material: MaterialOut
+    material: CPSEMaterialOut
     final_score: float
     description_score: float
     specification_score: float
-    category_score: float
+    classification_score: float
     uom_score: float
-    image_score: float
     attribute_score: float
+    grade_score: float
+    dimension_score: float
+    standard_score: float
+    manufacturer_score: float
+    function_score: float
+    criticality_score: float
 
 
 class AIAnalysisOut(BaseModel):
@@ -24,10 +29,15 @@ class AIAnalysisOut(BaseModel):
     final_score: float
     description_score: float
     specification_score: float
-    category_score: float
+    classification_score: float
     uom_score: float
-    image_score: float
     attribute_score: float
+    grade_score: float
+    dimension_score: float
+    standard_score: float
+    manufacturer_score: float
+    function_score: float
+    criticality_score: float
     ml_probability: Optional[float] = None
     ml_status: Optional[str] = None
     decision: str
@@ -37,8 +47,7 @@ class AIAnalysisOut(BaseModel):
     failure_reason: Optional[str] = None
     technical_conflict: bool = False
     conflict_reason: Optional[str] = None
-    best_candidate: Optional[MaterialOut] = None
-    candidates: list[CandidateOut] = []
+    best_candidate: Optional[CPSEMaterialOut] = None
     created_at: datetime
 
     class Config:

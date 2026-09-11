@@ -1,11 +1,11 @@
 """
-Celery background jobs (spec section 22).
+Celery background jobs (spec section 40).
 
-Every material - whether uploaded one at a time or as part of a
-10,000-row bulk import - gets its AI analysis queued here instead of
-blocking the HTTP request. `ai_analysis` is the single entry point; it
-internally performs embedding generation, pgvector similarity search,
-detailed scoring and the decision-engine step (see app.ai.analyzer).
+Every CPSE material synced from a source connection gets its AI analysis
+queued here instead of blocking the sync request. `ai_analysis` is the
+single entry point; it internally performs embedding generation, pgvector
+similarity search, detailed scoring and the decision-engine step (see
+app.ai.analyzer).
 """
 import logging
 import uuid
@@ -39,52 +39,87 @@ def bulk_ai_analysis(material_ids: list[str]) -> dict:
     return {"queued": len(material_ids)}
 
 
-@celery_app.task(name="app.workers.tasks.process_bulk_import", bind=True, max_retries=1)
-def process_bulk_import(self, upload_batch_id: str, rows: list[dict], created_by: str | None) -> dict:
+@celery_app.task(name="app.workers.tasks.settle_batch", bind=True, max_retries=1)
+def settle_batch(self, _group_results: list[dict], material_ids: list[str]) -> dict:
     """
-    Runs the row-insertion step of a bulk material upload in the background
-    (spec section 22 / dynamic upload redesign) so the HTTP request that
-    triggers a multi-thousand-row import never blocks on it. Reuses
-    bulk_import.import_valid_rows unchanged, then queues AI analysis for
-    every created material exactly as the synchronous path always has.
-    """
-    import uuid as uuid_module
-    from datetime import datetime, timezone
+    Chord callback (see app.connectors.sync_engine._dispatch_batch_chord) -
+    Celery only invokes this once every `ai_analysis` task in the same sync
+    batch has actually finished, via the result backend's own completion
+    tracking (never a fixed delay). By then every material in the batch
+    already has an embedding, so a second analysis pass over the same set
+    can find candidates that didn't exist yet during each material's first,
+    independent pass - settling a burst of newly-synced, mutually-matching
+    materials into their final shared mapping automatically (spec section
+    28). Re-analysis is idempotent and never reassigns an already-APPROVED
+    mapping (app.ai.analyzer._handle_decision).
 
-    from app.models.enums import UploadStatus
-    from app.models.upload_batch import UploadBatch
-    from app.services import bulk_import
+    `_group_results` (the list of each ai_analysis task's own return value)
+    is unused - it exists only because Celery's chord calling convention
+    passes the group's results as the callback's first argument.
+    """
+    db = SessionLocal()
+    try:
+        for material_id in material_ids:
+            analyzer.analyze_material(db, uuid.UUID(material_id))
+        return {"settled": len(material_ids)}
+    finally:
+        db.close()
+
+
+@celery_app.task(name="app.workers.tasks.run_source_full_sync", bind=True, max_retries=0)
+def run_source_full_sync(self, source_connection_id: str) -> dict:
+    """Manually-triggered (or Full Sync button) full-table pull for one
+    source connection. See app.connectors.sync_engine - retries/backoff
+    happen inside the connector itself, so this task does not retry the
+    whole sync on failure."""
+    from app.connectors import sync_engine
+    from app.models.source_connection import SourceConnection
 
     db = SessionLocal()
     try:
-        batch = db.query(UploadBatch).filter(UploadBatch.id == uuid_module.UUID(upload_batch_id)).first()
-        if batch is None:
-            return {"error": "upload batch not found"}
+        connection = db.query(SourceConnection).filter(SourceConnection.id == uuid.UUID(source_connection_id)).first()
+        if connection is None:
+            return {"error": "source connection not found"}
+        batch = sync_engine.run_full_sync(db, connection)
+        return {"batch_id": str(batch.id), "status": batch.status}
+    finally:
+        db.close()
 
-        batch.status = UploadStatus.PROCESSING.value
-        db.commit()
 
-        try:
-            created_ids = bulk_import.import_valid_rows(
-                db, rows, uuid_module.UUID(created_by) if created_by else None
-            )
-        except Exception as exc:  # noqa: BLE001
-            batch.status = UploadStatus.FAILED.value
-            batch.error_message = str(exc)
-            batch.completed_at = datetime.now(timezone.utc)
-            db.commit()
-            raise
+@celery_app.task(name="app.workers.tasks.run_source_incremental_sync", bind=True, max_retries=0)
+def run_source_incremental_sync(self, source_connection_id: str) -> dict:
+    """Sync Now / scheduled auto-sync path: only materials changed since
+    the connection's last successful cursor."""
+    from app.connectors import sync_engine
+    from app.models.source_connection import SourceConnection
 
-        batch.valid_records = len(created_ids)
-        batch.status = (
-            UploadStatus.COMPLETED.value if len(created_ids) == batch.total_records else UploadStatus.PARTIAL.value
-        )
-        batch.completed_at = datetime.now(timezone.utc)
-        db.commit()
+    db = SessionLocal()
+    try:
+        connection = db.query(SourceConnection).filter(SourceConnection.id == uuid.UUID(source_connection_id)).first()
+        if connection is None:
+            return {"error": "source connection not found"}
+        batch = sync_engine.run_incremental_sync(db, connection)
+        return {"batch_id": str(batch.id), "status": batch.status}
+    finally:
+        db.close()
 
-        for material_id in created_ids:
-            ai_analysis.delay(str(material_id))
 
-        return {"upload_batch_id": upload_batch_id, "imported": len(created_ids), "status": batch.status}
+@celery_app.task(name="app.workers.tasks.check_due_source_syncs")
+def check_due_source_syncs() -> dict:
+    """
+    Celery Beat entry point (see app.workers.celery_app's beat_schedule):
+    on a short fixed tick, checks every enabled source connection's OWN
+    sync_interval_seconds and enqueues an incremental sync for whichever
+    ones are due - one periodic task driven entirely by per-row
+    configuration rather than a hardcoded global interval (spec section 27).
+    """
+    from app.connectors import sync_engine
+
+    db = SessionLocal()
+    try:
+        due = sync_engine.list_due_connections(db)
+        for connection in due:
+            run_source_incremental_sync.delay(str(connection.id))
+        return {"triggered": len(due)}
     finally:
         db.close()

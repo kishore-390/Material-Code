@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.db.session import get_db
-from app.models.material import Material
+from app.models.material import CPSEMaterial
 from app.models.matching import AIAnalysis, MaterialMatch
 from app.models.user import User
 from app.schemas.ai import AIAnalysisOut, AnalyzeTriggerResponse, CandidateOut
@@ -15,9 +15,9 @@ router = APIRouter(prefix="/ai", tags=["AI Analysis"])
 
 @router.post("/analyze/{material_id}", response_model=AnalyzeTriggerResponse)
 def trigger_analysis(material_id: uuid.UUID, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    material = db.query(Material).filter(Material.id == material_id).first()
+    material = db.query(CPSEMaterial).filter(CPSEMaterial.id == material_id).first()
     if not material:
-        raise HTTPException(status_code=404, detail="Material not found")
+        raise HTTPException(status_code=404, detail="CPSE material not found")
 
     from app.workers.tasks import ai_analysis
 
@@ -44,7 +44,11 @@ def get_analysis(material_id: uuid.UUID, db: Session = Depends(get_db), current_
     )
     if not analysis:
         raise HTTPException(status_code=404, detail="No AI analysis found for this material yet")
+    return analysis
 
+
+@router.get("/analysis/{material_id}/candidates", response_model=list[CandidateOut])
+def get_candidates(material_id: uuid.UUID, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     matches = (
         db.query(MaterialMatch)
         .filter(MaterialMatch.material_id == material_id)
@@ -52,20 +56,21 @@ def get_analysis(material_id: uuid.UUID, db: Session = Depends(get_db), current_
         .limit(5)
         .all()
     )
-    candidates = [
+    return [
         CandidateOut(
             material=m.candidate,
             final_score=m.final_score,
             description_score=m.description_score,
             specification_score=m.specification_score,
-            category_score=m.category_score,
+            classification_score=m.classification_score,
             uom_score=m.uom_score,
-            image_score=m.image_score,
             attribute_score=m.attribute_score,
+            grade_score=m.grade_score,
+            dimension_score=m.dimension_score,
+            standard_score=m.standard_score,
+            manufacturer_score=m.manufacturer_score,
+            function_score=m.function_score,
+            criticality_score=m.criticality_score,
         )
         for m in matches
     ]
-
-    out = AIAnalysisOut.model_validate(analysis)
-    out.candidates = candidates
-    return out
