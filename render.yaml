@@ -1,0 +1,56 @@
+services:
+  # Database
+  - type: pgo
+    name: mh-postgres
+    plan: free
+    postgresMajorVersion: 16
+    region: singapore
+
+  # Redis
+  - type: redis
+    name: mh-redis
+    plan: free
+    region: singapore
+    ipAllowList: [] # only allow internal connections
+
+  # Backend Web Service
+  - type: web
+    name: mh-backend
+    env: python
+    region: singapore
+    plan: free
+    buildCommand: "cd backend && pip install -r requirements.txt"
+    startCommand: "cd backend && alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: mh-postgres
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: mh-redis
+          property: connectionString
+      - key: PYTHON_VERSION
+        value: 3.11.0
+
+  # Celery Worker (Note: Render does not have a free tier for Background Workers)
+  # Uncomment if you upgrade your Render account to a paid plan.
+  # - type: worker
+  #   name: mh-worker
+  #   env: python
+  #   region: singapore
+  #   buildCommand: "cd backend && pip install -r requirements.txt"
+  #   startCommand: "cd backend && celery -A app.workers.celery_app worker --loglevel=info --concurrency=2"
+  #   envVars:
+  #     - key: DATABASE_URL
+  #       fromDatabase:
+  #         name: mh-postgres
+  #         property: connectionString
+  #     - key: REDIS_URL
+  #       fromService:
+  #         type: redis
+  #         name: mh-redis
+  #         property: connectionString
+  #     - key: PYTHON_VERSION
+  #       value: 3.11.0
