@@ -486,3 +486,5 @@ Material Mapping · Procurement Aggregation · Material Master Governance.
 
 The official product name is **AI-Powered National Unified Material Master** — not an
 "ERP Harmonizer", "Upload Manager", or "Source DB Manager".
+#   M a t e r i a l - C o d e  
+ 
