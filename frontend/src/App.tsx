@@ -17,7 +17,6 @@ import HarmonizationList from "@/pages/HarmonizationList";
 import HarmonizationPairDetail from "@/pages/HarmonizationPairDetail";
 import LegacyCodes from "@/pages/LegacyCodes";
 import LegacyCodeDetail from "@/pages/LegacyCodeDetail";
-import Login from "@/pages/Login";
 import MaterialAnalysis from "@/pages/MaterialAnalysis";
 import MaterialDetail from "@/pages/MaterialDetail";
 import Materials from "@/pages/Materials";
@@ -32,8 +31,6 @@ const REVIEW_ROLES = ["ADMIN", "MATERIAL_EXPERT", "REVIEWER", "VIEWER"] as const
 export default function App() {
   return (
     <Routes>
-      <Route path="/login" element={<Login />} />
-
       <Route
         element={
           <RequireAuth>
